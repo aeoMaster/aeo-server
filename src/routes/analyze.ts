@@ -5,10 +5,11 @@ import { AppError } from "../middleware/errorHandler";
 import { authenticate } from "../middleware/auth";
 import { Analysis } from "../models/Analysis";
 import axios from "axios";
+import { AnalysisController } from "../controllers/analysisController";
 
 const router = Router();
 
-const getOpenAI = () => {
+const getOpenAI = (): OpenAI => {
   if (!process.env.OPENAI_API_KEY) {
     throw new AppError(500, "OpenAI API key is not configured");
   }
@@ -26,10 +27,10 @@ const analyzeSchema = z.object({
 });
 
 // Helper function to estimate tokens (roughly 4 characters per token)
-const estimateTokens = (text: string) => Math.ceil(text.length / 4);
+const estimateTokens = (text: string): number => Math.ceil(text.length / 4);
 
 // Helper function to truncate text to max tokens
-const truncateToMaxTokens = (text: string, maxTokens: number = 800) => {
+const truncateToMaxTokens = (text: string, maxTokens: number = 800): string => {
   const estimatedTokens = estimateTokens(text);
   if (estimatedTokens <= maxTokens) return text;
 
@@ -116,18 +117,7 @@ router.post("/", authenticate, async (req, res, next) => {
 });
 
 // Get analysis history
-router.get("/history", authenticate, async (req, res, next) => {
-  try {
-    const historyUserId = (req.user as { _id: string })._id;
-    const analyses = await Analysis.find({ user: historyUserId })
-      .sort({ createdAt: -1 })
-      .select("-rawAnalysis"); // Exclude raw analysis to reduce payload size
-
-    res.json(analyses);
-  } catch (error) {
-    next(error);
-  }
-});
+router.get("/history", authenticate, AnalysisController.getHistory);
 
 // Get single analysis
 router.get("/:id", authenticate, async (req, res, next) => {

@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { User, IUser } from "../models/User";
 import { AppError } from "../middleware/errorHandler";
+import { SubscriptionService } from "../services/subscriptionService";
 
 const router = Router();
 
@@ -31,7 +32,13 @@ router.post("/signup", async (req, res, next) => {
     }
 
     // Create new user
-    const user = await User.create({ name, email, password });
+    const user = (await User.create({ name, email, password })) as IUser;
+
+    if (!user._id) {
+      throw new AppError(500, "User ID not found");
+    }
+    // Create free tier subscription and usage records
+    await SubscriptionService.createFreeTierSubscription(user._id.toString());
 
     // Generate JWT token
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET as string, {
@@ -92,6 +99,7 @@ router.get(
   "/google/callback",
   passport.authenticate("google", { session: false }),
   (req, res) => {
+    console.log("req.user", req.user);
     const user = req.user as IUser;
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET as string, {
       expiresIn: "7d",

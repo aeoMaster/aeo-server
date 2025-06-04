@@ -5,14 +5,17 @@ import dotenv from "dotenv";
 import passport from "passport";
 import { errorHandler } from "./middleware/errorHandler";
 import { initializePassport } from "./config/passport";
+import { seedPackages } from "./config/seedPackages";
 import { authRoutes } from "./routes/auth";
 import { analyzeRoutes } from "./routes/analyze";
 import { settingsRoutes } from "./routes/settings";
+import { subscriptionRoutes } from "./routes/subscription";
+import { companyRoutes } from "./routes/company";
+import { usageRoutes } from "./routes/usage";
 
 // Load environment variables FIRST
 dotenv.config();
 
-// Initialize Express app
 const app: Express = express();
 
 // Middleware
@@ -24,34 +27,29 @@ app.use(passport.initialize());
 initializePassport();
 
 // Connect to MongoDB
-const connectDB = async (): Promise<void> => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI as string);
+mongoose
+  .connect(process.env.MONGODB_URI as string)
+  .then(() => {
     console.log("Connected to MongoDB");
-  } catch (error) {
+    // Seed packages after successful database connection
+    seedPackages();
+  })
+  .catch((error) => {
     console.error("MongoDB connection error:", error);
-    process.exit(1);
-  }
-};
+  });
 
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/analyze", analyzeRoutes);
 app.use("/api/settings", settingsRoutes);
+app.use("/api/subscription", subscriptionRoutes);
+app.use("/api/company", companyRoutes);
+app.use("/api/usage", usageRoutes);
 
-// Error handling middleware
+// Error handling
 app.use(errorHandler);
 
-// Start server
-const PORT = process.env.PORT || 3001;
-const startServer = async (): Promise<void> => {
-  await connectDB();
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
-};
-
-startServer().catch((error) => {
-  console.error("Failed to start server:", error);
-  process.exit(1);
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
