@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { AnalysisService } from "../services/analysisService";
 
 import { z } from "zod";
+import { IUser } from "@/models/User";
 
 // Validation schema for query parameters
 const historyQuerySchema = z.object({
@@ -34,7 +35,8 @@ export class AnalysisController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const userId = (req.user as { _id: string })._id;
+      const user: IUser = req.user as IUser;
+      const userId = user._id.toString();
 
       // Validate and parse query parameters
       const queryParams = historyQuerySchema.parse(req.query);

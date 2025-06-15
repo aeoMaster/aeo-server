@@ -1,13 +1,26 @@
 import mongoose, { Document, Schema } from "mongoose";
-import { IUser } from "./User";
 
 export interface ICompany extends Document {
   name: string;
   industry?: string;
   size?: string;
   owner: mongoose.Types.ObjectId;
+  settings: {
+    theme?: string;
+    notifications?: boolean;
+    [key: string]: any;
+  };
+  invitations: Array<{
+    email: string;
+    role: string;
+    token: string;
+    status: "pending" | "accepted" | "cancelled";
+    createdAt: Date;
+  }>;
   createdAt: Date;
   updatedAt: Date;
+  id: string;
+  _id: string;
 }
 
 const companySchema = new Schema<ICompany>(
@@ -30,6 +43,35 @@ const companySchema = new Schema<ICompany>(
       ref: "User",
       required: true,
     },
+    settings: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
+    invitations: [
+      {
+        email: {
+          type: String,
+          required: true,
+        },
+        role: {
+          type: String,
+          required: true,
+        },
+        token: {
+          type: String,
+          required: true,
+        },
+        status: {
+          type: String,
+          enum: ["pending", "accepted", "cancelled"],
+          default: "pending",
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   {
     timestamps: true,

@@ -14,6 +14,7 @@ export interface IPackage extends Document {
     apiAccess: boolean;
     customBranding: boolean;
     prioritySupport: boolean;
+    features: Record<string, boolean>;
   };
   trialDays: number;
   status: "active" | "deprecated" | "hidden";

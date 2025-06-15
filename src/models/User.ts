@@ -1,12 +1,13 @@
 import mongoose, { Document, Schema } from "mongoose";
 import bcrypt from "bcryptjs";
+import { ICompany } from "./Company";
 
 export interface IUser extends Document {
   name: string;
   email: string;
   password?: string;
   googleId?: string;
-  company?: mongoose.Types.ObjectId;
+  company?: mongoose.Types.ObjectId | ICompany;
   role: "owner" | "admin" | "user" | "viewer";
   subscription?: mongoose.Types.ObjectId;
   stripeCustomerId?: string;
@@ -15,6 +16,8 @@ export interface IUser extends Document {
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
+  id: string;
+  _id: string;
 }
 
 const userSchema = new Schema<IUser>({
@@ -94,5 +97,13 @@ userSchema.methods.comparePassword = async function (
   if (!this.password) return false;
   return bcrypt.compare(candidatePassword, this.password);
 };
+
+// Add virtual populate for company
+userSchema.virtual("companyDetails", {
+  ref: "Company",
+  localField: "company",
+  foreignField: "_id",
+  justOne: true,
+});
 
 export const User = mongoose.model<IUser>("User", userSchema);

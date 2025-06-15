@@ -1,5 +1,8 @@
-import { Usage } from "../models/Usage";
+import { User } from "../models/User";
+import { Company } from "../models/Company";
 import { Subscription } from "../models/Subscription";
+import { IPackage } from "../models/Package";
+import { IUsage, Usage } from "../models/Usage";
 import { AppError } from "../middleware/errorHandler";
 
 export class UsageService {
@@ -154,38 +157,188 @@ export class UsageService {
     }
   }
 
+  /**
+   * Returns the current usage for a user or company. If usage records do not exist,
+   * they are created based on the current subscription plan.
+   */
   static async getCurrentUsage(userId: string, companyId?: string) {
-    try {
-      const usage = await Usage.find({
-        user: userId,
-        company: companyId || undefined,
-        "period.end": { $gt: new Date() },
-      }).sort({ createdAt: -1 });
+    const usageIdentifier = companyId
+      ? { company: companyId }
+      : { user: userId };
+    const usageDocs = await Usage.find({
+      ...usageIdentifier,
+      "period.end": { $gt: new Date() },
+    });
 
-      if (!usage || usage.length === 0) {
-        return {
-          analysis: { used: 0, remaining: 0, total: 0 },
-          api_call: { used: 0, remaining: 0, total: 0 },
-          storage: { used: 0, remaining: 0, total: 0 },
+    if (usageDocs.length > 0) {
+      return this.formatUsage(usageDocs);
+    }
+
+    // No usage records found, so we'll create them.
+    const ownerId = companyId
+      ? (
+          await Company.findById(companyId).select("owner").lean()
+        )?.owner?.toString()
+      : userId;
+
+    if (!ownerId) {
+      throw new AppError(404, "Could not determine subscription owner.");
+    }
+
+    const subscription = await Subscription.findOne({
+      user: ownerId,
+      status: "active",
+    })
+      .populate<{ package: IPackage }>("package")
+      .lean();
+
+    if (!subscription || !subscription.package) {
+      return this.formatUsage([]); // Return default empty usage if no subscription
+    }
+
+    // Create new usage records based on the subscription package
+    return this.createAndFormatUsage(userId, companyId, subscription);
+  }
+
+  /**
+   * Helper to format an array of usage documents into a structured object.
+   */
+  private static formatUsage(usageDocs: IUsage[]) {
+    const usageData = {
+      analysis: { used: 0, remaining: 0, total: 0 },
+      api_call: { used: 0, remaining: 0, total: 0 },
+      storage: { used: 0, remaining: 0, total: 0 },
+    };
+
+    for (const doc of usageDocs) {
+      if (usageData[doc.type]) {
+        usageData[doc.type] = {
+          used: doc.limits.used,
+          remaining: doc.limits.remaining,
+          total: doc.limits.total,
         };
       }
+    }
+    return usageData;
+  }
 
-      // Group usage by type
-      const usageByType = usage.reduce(
-        (acc, curr) => {
-          acc[curr.type] = {
-            used: curr.limits.used,
-            remaining: curr.limits.remaining,
-            total: curr.limits.total,
-          };
-          return acc;
-        },
-        {} as Record<string, { used: number; remaining: number; total: number }>
+  /**
+   * Helper to create usage records for all types and formats them.
+   */
+  private static async createAndFormatUsage(
+    userId: string,
+    companyId: string | undefined,
+    subscription: any
+  ) {
+    const { features } = subscription.package;
+    const usageTypes = ["analysis", "api_call", "storage"] as const;
+    const newUsageDocs: IUsage[] = [];
+
+    const period = {
+      start: subscription.currentPeriodStart,
+      end: subscription.currentPeriodEnd,
+    };
+
+    for (const type of usageTypes) {
+      let total = 0;
+      if (type === "analysis") total = features.maxAnalyses ?? 0;
+      // Add more cases for 'api_call' and 'storage' if they exist in your package features
+
+      const newUsage = await Usage.create({
+        user: companyId ? undefined : userId,
+        company: companyId,
+        type: type,
+        period,
+        limits: { total, used: 0, remaining: total },
+      });
+      newUsageDocs.push(newUsage);
+    }
+
+    return this.formatUsage(newUsageDocs);
+  }
+
+  /**
+   * Checks if a user or company has remaining usage for a specific feature.
+   */
+  static async hasRemaining(
+    identifier: { userId?: string; companyId?: string },
+    type: "analysis" | "members"
+  ): Promise<boolean> {
+    const { userId, companyId } = identifier;
+
+    let subscriptionOwnerId = userId;
+    if (companyId) {
+      const company = await Company.findById(companyId).select("owner").lean();
+      if (company) {
+        subscriptionOwnerId = company.owner.toString();
+      }
+    }
+
+    if (!subscriptionOwnerId) return false;
+
+    const subscription = await Subscription.findOne({
+      user: subscriptionOwnerId,
+      status: "active",
+    })
+      .populate("package")
+      .lean();
+
+    if (!subscription || !subscription.package) return false;
+
+    const features = (subscription.package as IPackage).features;
+
+    if (type === "analysis") {
+      const usageIdentifier = companyId
+        ? { company: companyId }
+        : { user: userId };
+      const usage = await Usage.findOne({
+        ...usageIdentifier,
+        type: "analysis",
+      });
+      const used = usage ? usage.limits.used : 0;
+
+      return features.maxAnalyses < 0 || used < features.maxAnalyses;
+    }
+
+    if (type === "members") {
+      if (!companyId) return true;
+
+      const maxUsers = features.maxUsers ?? 1;
+      if (maxUsers < 0) return true;
+
+      const memberCount = await User.countDocuments({ company: companyId });
+      return memberCount < maxUsers;
+    }
+
+    return true;
+  }
+
+  /**
+   * Increments the usage count for a user or company.
+   */
+  static async incrementUsage(
+    identifier: { userId?: string; companyId?: string },
+    type: "analysis",
+    amount: number = 1
+  ) {
+    const usageIdentifier = identifier.companyId
+      ? { company: identifier.companyId }
+      : { user: identifier.userId };
+
+    const usage = await Usage.findOne({ ...usageIdentifier, type });
+
+    if (usage) {
+      usage.limits.used += amount;
+      await usage.save();
+      return usage;
+    } else {
+      // This case should ideally not happen if usage records are created with subscriptions.
+      console.warn(
+        `Usage document not found for incrementing. Identifier: ${JSON.stringify(
+          usageIdentifier
+        )}, Type: ${type}`
       );
-
-      return usageByType;
-    } catch (error) {
-      throw new AppError(500, "Failed to get current usage");
+      return;
     }
   }
 }

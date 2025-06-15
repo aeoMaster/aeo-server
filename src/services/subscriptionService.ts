@@ -1,6 +1,6 @@
 import { User } from "../models/User";
-import { Package } from "../models/Package";
-import { Subscription } from "../models/Subscription";
+import { Package, IPackage } from "../models/Package";
+import { Subscription, ISubscription } from "../models/Subscription";
 import { Usage } from "../models/Usage";
 import { AppError } from "../middleware/errorHandler";
 
@@ -133,6 +133,9 @@ export class SubscriptionService {
           remaining: package_.features.maxAnalyses,
         },
       });
+
+      // After creating the subscription, create/reset the usage records.
+      await this.upsertUsageForSubscription(subscription);
 
       return {
         subscription,
@@ -268,6 +271,42 @@ export class SubscriptionService {
     } catch (error) {
       console.error("Error creating free tier subscription:", error);
       throw new AppError(500, "Failed to create free tier subscription");
+    }
+  }
+
+  /**
+   * Creates or resets usage records based on a subscription's package.
+   * This should be called whenever a subscription is created or changed.
+   */
+  private static async upsertUsageForSubscription(subscription: ISubscription) {
+    const { user, company, package: subPackage } = subscription;
+    const features = (subPackage as IPackage).features;
+
+    const usageTypes = ["analysis", "api_call", "storage"] as const;
+    const period = {
+      start: subscription.currentPeriodStart,
+      end: subscription.currentPeriodEnd,
+    };
+
+    for (const type of usageTypes) {
+      let total = 0;
+      if (type === "analysis") total = features.maxAnalyses ?? 0;
+      // Add more cases for other features if they exist in your package model
+
+      const usageIdentifier = company ? { company } : { user };
+
+      await Usage.findOneAndUpdate(
+        { ...usageIdentifier, type },
+        {
+          $set: {
+            period,
+            "limits.total": total,
+            // We don't reset 'used' here, as it should persist through an upgrade.
+            // A new billing period would reset 'used' to 0.
+          },
+        },
+        { upsert: true, new: true }
+      );
     }
   }
 }

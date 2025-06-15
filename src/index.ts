@@ -12,6 +12,8 @@ import { settingsRoutes } from "./routes/settings";
 import { subscriptionRoutes } from "./routes/subscription";
 import { companyRoutes } from "./routes/company";
 import { usageRoutes } from "./routes/usage";
+import { packageRoutes } from "./routes/package";
+import { siteAnalysisRoutes } from "./routes/siteAnalysis";
 
 // Load environment variables FIRST
 dotenv.config();
@@ -45,6 +47,8 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/subscription", subscriptionRoutes);
 app.use("/api/company", companyRoutes);
 app.use("/api/usage", usageRoutes);
+app.use("/api/packages", packageRoutes);
+app.use("/api/site", siteAnalysisRoutes);
 
 // Error handling
 app.use(errorHandler);

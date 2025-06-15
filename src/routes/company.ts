@@ -2,6 +2,7 @@ import { Router } from "express";
 import { CompanyController } from "../controllers/companyController";
 import { authenticate } from "../middleware/auth";
 import { checkRole } from "../middleware/roleCheck";
+import { checkUsage } from "../middleware/usageCheck";
 
 const router = Router();
 
@@ -36,6 +37,38 @@ router.delete(
   authenticate,
   checkRole(["admin"]),
   CompanyController.removeUserFromCompany
+);
+
+// Update company settings
+router.put("/settings", authenticate, CompanyController.updateCompanySettings);
+
+// Send invitation via email
+router.post(
+  "/invite",
+  authenticate,
+  checkUsage("members"),
+  CompanyController.sendInvitation
+);
+
+// Generate invitation link
+router.post(
+  "/invite/link",
+  authenticate,
+  checkUsage("members"),
+  CompanyController.generateInvitationLink
+);
+
+// Accept invitation (for both email and link)
+router.post("/invite/accept", CompanyController.acceptInvitation);
+
+// Get pending invitations
+router.get("/invites", authenticate, CompanyController.getPendingInvitations);
+
+// Cancel invitation
+router.delete(
+  "/invite/:inviteId",
+  authenticate,
+  CompanyController.cancelInvitation
 );
 
 export const companyRoutes = router;
