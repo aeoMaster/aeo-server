@@ -3,6 +3,7 @@ import { Package, IPackage } from "../models/Package";
 import { Subscription, ISubscription } from "../models/Subscription";
 import { Usage } from "../models/Usage";
 import { AppError } from "../middleware/errorHandler";
+import { Company } from "../models/Company";
 
 export class SubscriptionService {
   static async getCurrentSubscription(userId: string) {
@@ -97,6 +98,7 @@ export class SubscriptionService {
       const package_ = await Package.findById(packageId);
       if (!package_) throw new AppError(404, "Package not found");
 
+      console.log("package_", package_);
       // Create subscription record
       const subscription = await Subscription.create({
         user: userId,
@@ -116,32 +118,91 @@ export class SubscriptionService {
             : undefined,
       });
 
-      // Initialize usage tracking
-      await Usage.create({
-        user: userId,
-        type: "analysis",
-        period: {
-          start: new Date(),
-          end: new Date(
-            Date.now() +
-              (billingCycle === "monthly" ? 30 : 365) * 24 * 60 * 60 * 1000
-          ),
-        },
-        limits: {
-          total: package_.features.maxAnalyses,
-          used: 0,
-          remaining: package_.features.maxAnalyses,
-        },
-      });
+      // Populate the package before using it
+      const populatedSubscription = await Subscription.findById(
+        subscription._id
+      )
+        .populate<{ package: IPackage }>("package")
+        .lean();
 
-      // After creating the subscription, create/reset the usage records.
-      await this.upsertUsageForSubscription(subscription);
+      if (!populatedSubscription) {
+        throw new AppError(500, "Failed to create subscription");
+      }
+
+      // Update all existing usage records with new limits
+      const usageTypes = ["analysis", "api_call", "storage"] as const;
+      const period = {
+        start: subscription.currentPeriodStart,
+        end: subscription.currentPeriodEnd,
+      };
+
+      // Get user's company if any
+      const userCompany = await Company.findOne({ owner: userId }).lean();
+      const companyId = userCompany?._id;
+
+      for (const type of usageTypes) {
+        let total = 0;
+        if (type === "analysis") total = package_.features.maxAnalyses;
+        else if (type === "api_call")
+          total = 1000; // Default API call limit
+        else if (type === "storage") total = 1000; // Default storage limit
+
+        // Get current usage counts
+        const currentUserUsage = await Usage.findOne({
+          user: userId,
+          type,
+        }).lean();
+        const currentCompanyUsage = companyId
+          ? await Usage.findOne({ company: companyId, type }).lean()
+          : null;
+
+        const userCount = currentUserUsage?.count || 0;
+        const companyCount = currentCompanyUsage?.count || 0;
+
+        // Update or create usage records for both user and company
+        const updatePromises = [
+          // Update user usage
+          Usage.findOneAndUpdate(
+            { user: userId, type },
+            {
+              $set: {
+                period,
+                "limits.total": total,
+                "limits.used": userCount,
+                "limits.remaining": total - userCount,
+              },
+            },
+            { upsert: true, new: true }
+          ),
+        ];
+
+        // If user has a company, update company usage as well
+        if (companyId) {
+          updatePromises.push(
+            Usage.findOneAndUpdate(
+              { company: companyId, type },
+              {
+                $set: {
+                  period,
+                  "limits.total": total,
+                  "limits.used": companyCount,
+                  "limits.remaining": total - companyCount,
+                },
+              },
+              { upsert: true, new: true }
+            )
+          );
+        }
+
+        await Promise.all(updatePromises);
+      }
 
       return {
-        subscription,
+        subscription: populatedSubscription,
         message: "Subscription created successfully",
       };
     } catch (error) {
+      console.error("Error in createSubscription:", error);
       throw new AppError(500, "Failed to create subscription");
     }
   }
@@ -288,25 +349,26 @@ export class SubscriptionService {
       end: subscription.currentPeriodEnd,
     };
 
+    // First, delete any existing usage records for this user/company
+    const usageIdentifier = company ? { company } : { user };
+    await Usage.deleteMany(usageIdentifier);
+
+    // Then create new usage records
     for (const type of usageTypes) {
       let total = 0;
       if (type === "analysis") total = features.maxAnalyses ?? 0;
       // Add more cases for other features if they exist in your package model
 
-      const usageIdentifier = company ? { company } : { user };
-
-      await Usage.findOneAndUpdate(
-        { ...usageIdentifier, type },
-        {
-          $set: {
-            period,
-            "limits.total": total,
-            // We don't reset 'used' here, as it should persist through an upgrade.
-            // A new billing period would reset 'used' to 0.
-          },
+      await Usage.create({
+        ...usageIdentifier,
+        type,
+        period,
+        limits: {
+          total,
+          used: 0,
+          remaining: total,
         },
-        { upsert: true, new: true }
-      );
+      });
     }
   }
 }

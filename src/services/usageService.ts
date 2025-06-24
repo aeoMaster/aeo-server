@@ -181,16 +181,18 @@ export class UsageService {
         )?.owner?.toString()
       : userId;
 
+    console.log("ownerId", ownerId);
     if (!ownerId) {
       throw new AppError(404, "Could not determine subscription owner.");
     }
 
     const subscription = await Subscription.findOne({
       user: ownerId,
-      status: "active",
+      status: { $in: ["active", "trial"] }, // Include both active and trial subscriptions
     })
       .populate<{ package: IPackage }>("package")
       .lean();
+    console.log("subscription", subscription);
 
     if (!subscription || !subscription.package) {
       return this.formatUsage([]); // Return default empty usage if no subscription
@@ -278,7 +280,7 @@ export class UsageService {
 
     const subscription = await Subscription.findOne({
       user: subscriptionOwnerId,
-      status: "active",
+      status: { $in: ["active", "trial"] }, // Include both active and trial subscriptions
     })
       .populate("package")
       .lean();

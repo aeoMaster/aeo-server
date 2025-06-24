@@ -16,16 +16,20 @@ export class SubscriptionController {
     next: NextFunction
   ): Promise<void> {
     try {
+      console.log("createSubscription");
       const userId = (req.user as { _id: string })._id;
+      console.log("userId", userId);
       const { packageId, billingCycle } = createSubscriptionSchema.parse(
         req.body
       );
-
+      console.log("packageId", packageId);
+      console.log("billingCycle", billingCycle);
       const result = await SubscriptionService.createSubscription(
         userId,
         packageId,
         billingCycle
       );
+      console.log("result", result);
 
       res.json(result);
     } catch (error) {
