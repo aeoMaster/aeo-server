@@ -9,7 +9,8 @@ import * as cheerio from "cheerio";
 import urlLib from "url";
 import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
-import { getBestPracticeSnippet } from "../services/analyze/loadBestPractices";
+import { getBestPracticeSnippet } from "../services/analyze/bestPractices";
+import { analyzeHandler } from "../services/analyze/analyzeHandler";
 
 const router = Router();
 
@@ -246,7 +247,11 @@ export async function compactForAudit(
   const finalText = acc.join(" ");
 
   /* ---------- Conciseness metrics ---------- */
-  const firstParaWords = $full("p, li").first().text().trim().split(/\s+/).length;
+  const firstParaWords = $full("p, li")
+    .first()
+    .text()
+    .trim()
+    .split(/\s+/).length;
   const sentLens = finalText
     .split(/[.!?]+/)
     .filter(Boolean)
@@ -367,245 +372,7 @@ export function summarizeRobots(
   return result;
 }
 
-const RUBRIC_KEYS = [
-  "structured_data",
-  "speakable_ready",
-  "snippet_conciseness",
-  "crawler_access",
-  "freshness_meta",
-  "entity_linking",
-  "e_e_a_t_signals",
-  "media_alt_caption",
-  "hreflang_lang_meta",
-  "answer_upfront",
-];
-
-const htmlToAnalyze = `<!doctype html>
-<html lang="en"><!-- html_lang will now be "en" -->
-<head>
-  <title>Schema AEO Demo – full-metric test</title>
-  <meta name="description" content="Demo page with FAQPage, HowTo, Speakable, freshness meta, E-E-A-T, entity links, canonical and hreflang tags.">
-  <meta name="author" content="Jane Doe">
-  <meta property="article:published_time" content="2025-05-30T09:00:00Z">
-  <meta property="article:modified_time"  content="2025-06-01T12:00:00Z">
-
-  <!-- canonical -->
-  <link rel="canonical" href="https://example.com/en/aeo-demo.html">
-
-  <!-- hreflang alternates -->
-  <link rel="alternate" hreflang="en-gb" href="https://example.com/en/aeo-demo.html">
-  <link rel="alternate" hreflang="fr-fr" href="https://example.com/fr/aeo-demo.html">
-
-  <!-- FAQPage -->
-  <script type="application/ld+json">
-  { "@context":"https://schema.org",
-    "@type":"FAQPage",
-    "mainEntity":[
-      { "@type":"Question",
-        "name":"What is AEO?",
-        "acceptedAnswer":{
-          "@type":"Answer",
-          "text":"Answer-Engine Optimisation helps AI answer engines surface your content."}},
-      { "@type":"Question",
-        "name":"Does JSON-LD help AEO?",
-        "acceptedAnswer":{
-          "@type":"Answer",
-          "text":"Yes, JSON-LD is the clearest way to describe your content."}}
-    ]}
-  </script>
-
-  <!-- HowTo -->
-  <script type="application/ld+json">
-  { "@context":"https://schema.org",
-    "@type":"HowTo",
-    "name":"How to change a flat tyre",
-    "step":[
-      { "@type":"HowToStep","url":"#step1","name":"Loosen the lug nuts"},
-      { "@type":"HowToStep","url":"#step2","name":"Jack up the car"},
-      { "@type":"HowToStep","url":"#step3","name":"Remove the flat tyre"}]}
-  </script>
-
-  <!-- Stand-alone Speakable -->
-  <script type="application/ld+json">
-  { "@context":"https://schema.org",
-    "@type":"SpeakableSpecification",
-    "xpath":["/html/body/article/p[1]"]}
-  </script>
-</head>
-
-<body>
-  <header>
-    <h1>Schema.org Demo</h1>
-    <p class="byline">By <span class="author">Jane Doe</span> • Updated 1 June 2025</p>
-  </header>
-
-  <p id="intro">
-    <a href="https://en.wikipedia.org/wiki/Answer_engine_optimization">Answer-Engine optimisation</a>
-    improves visibility in modern search; read the
-    <a href="https://www.nytimes.com/2024/11/01/technology/seo-versus-aeo.html">NY Times overview</a>
-    or this <a href="https://www.bbc.com/future/article/20250318-will-ai-change-how-we-search">BBC analysis</a>.
-  </p>
-
-  <article>
-    <p id="step1"><strong>Step 1.</strong> Loosen each lug nut
-       (<a href="https://www.who.int/roadsafety/publications/manuals/tyre-safety">WHO tyre-safety guide</a>)
-       and see the <a href="https://openai.com/index/research-best-practices">OpenAI safety note</a>.
-    </p>
-    <p id="step2"><strong>Step 2.</strong> Jack up the car.</p>
-    <p id="step3"><strong>Step 3.</strong> Remove the nuts and lift the tyre off.</p>
-  </article>
-</body>
-</html>`;
-
-// Analysis route
-router.post("/", async (req, res, next) => {
-  try {
-    const { content, type, company, section } = analyzeSchema.parse(req.body);
-    const openai = getOpenAI();
-    // const currentUserId = (req.user as { _id: string })._id;
-
-    let contentToAnalyze;
-    if (type === "url") {
-      try {
-        const { html, robots } = await fetchUrlAssets(content);
-        contentToAnalyze = await compactForAudit(
-          htmlToAnalyze,
-          content,
-          robots
-        );
-      } catch (error) {
-        console.error("FETCH ERROR:", error);
-
-        throw new AppError(400, "Failed to fetch or extract URL content");
-      }
-    }
-
-    const bestPracticeSnippet = await getBestPracticeSnippet(RUBRIC_KEYS);
-
-    /******************************************************************
-     * 1. SYSTEM prompt – persona + rules + "give fixes"
-     ******************************************************************/
-    const systemPrompt = `
-You are an **expert Answer-Engine-Optimization (AEO) auditor**.
-
-TASK  
-• Score each category 0-5 using **SCORING_RUBRIC**.  
-• If a metric is “not-tested”, score it 0.  
-• Suggest the three highest-impact improvements, each ≤ 30 words.  
-• Respond **only** with valid JSON that matches **RESULT_SCHEMA**.
-
-SCORING_RUBRIC
-structured_data        (1.2) 0-5
-speakable_ready        (0.4) 0-5
-snippet_conciseness    (1.0) 0-5
-crawler_access         (1.0) 0-5
-freshness_meta         (0.5) 0-5
-entity_linking         (0.8) 0-5
-internal_link_depth†   (0.5) 0-5   ← not-tested → always 0
-perf_core_web_vitals†  (0.3) 0-5   ← not-tested → always 0
-e_e_a_t_signals        (0.6) 0-5
-media_alt_caption      (0.4) 0-5
-hreflang_lang_meta     (0.2) 0-5
-answer_upfront         (1.0) 0-5
-
-†These two metrics are not provided in METRICS.  
-  Assign a category score of **0**.
-
-<best_practices>
-${bestPracticeSnippet}
-</best_practices>
-
-RESULT_SCHEMA = {
-  score: float,                       // 0-10 weighted sum
-  category_scores: object,            // keys above
-  recommendations: [                  // exactly 3
-    { text: string, impact: 'high'|'med'|'low' }
-  ]
-}
-`.trim();
-
-    const finalSystemPrompt = systemPrompt.replace(
-      "{{BEST_PRACTICE_SNIPPET}}",
-      bestPracticeSnippet
-    );
-
-    console.log("finalSystemPrompt", finalSystemPrompt);
-
-    /******************************************************************
-     * 2. USER prompt – page HTML + robots.txt (or raw text)
-     ******************************************************************/
-    let userPrompt: string;
-
-    if (type === "url") {
-      const userPrompt = `
-      ### PAGE_HTML
-      ${contentToAnalyze}
-      
-      ### METRICS
-      ${JSON.stringify(contentToAnalyze?.metrics, null, 2)}
-      
-      ### ROBOTS_TXT
-      ${JSON.stringify(contentToAnalyze?.crawler_access, null, 2) || "robots.txt not found"}
-      `.trim();
-      console.log("userPrompt", userPrompt);
-    } else {
-      userPrompt = `
-    ### CONTENT
-    ${contentToAnalyze}
-    `.trim();
-      console.log("userPrompt", userPrompt);
-    }
-
-    /******************************************************************
-     * 3. OpenAI call
-     ******************************************************************/
-    // const response = await openai.chat.completions.create({
-    //   model: "gpt-4o-mini",
-    //   temperature: 0,
-    //   max_tokens: 800,
-    //   response_format: { type: "json_object" },
-    //   messages: [
-    //     { role: "system", content: systemPrompt },
-    //     { role: "user", content: userPrompt },
-    //   ],
-    // });
-    // console.log("response!", response);
-    // Parse and structure the response
-    // const analysis = response.choices[0]?.message?.content;
-    // if (!analysis) {
-    //   throw new AppError(500, "Failed to analyze content");
-    // }
-
-    // let result;
-    // try {
-    //   // Clean the response to ensure it's valid JSON
-    //   const cleanedAnalysis = analysis
-    //     .trim()
-    //     .replace(/^```json\s*|\s*```$/g, "");
-    //   result = JSON.parse(cleanedAnalysis);
-    // } catch (error) {
-    //   console.error("Failed to parse OpenAI response:", analysis);
-    //   throw new AppError(500, "Failed to parse analysis response");
-    // }
-
-    // Save analysis to database
-    // const savedAnalysis = await Analysis.create({
-    //   user: currentUserId,
-    //   type,
-    //   content: type === "content" ? content : undefined,
-    //   url: type === "url" ? content : undefined,
-    //   company,
-    //   section,
-    //   ...result,
-    //   rawAnalysis: analysis,
-    // });
-
-    // res.json(savedAnalysis);
-    res.json(contentToAnalyze);
-  } catch (error) {
-    next(error);
-  }
-});
+router.post("/", authenticate, analyzeHandler);
 
 // Get analysis history
 router.get("/history", authenticate, async (req, res, next) => {
