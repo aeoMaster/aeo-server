@@ -21,6 +21,8 @@ router.get("/:id", authenticate, async (req, res, next) => {
       user: userId,
     });
 
+    console.log("analysis", analysis);
+
     if (!analysis) {
       throw new AppError(404, "Analysis not found");
     }

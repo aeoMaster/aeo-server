@@ -69,7 +69,7 @@ const analysisSchema = new Schema<IAnalysis>({
   section: String,
   score: {
     type: Number,
-    required: true,
+    // required: true,
   },
   metrics: {
     readability: Number,
@@ -83,7 +83,7 @@ const analysisSchema = new Schema<IAnalysis>({
   },
   feedback: {
     type: String,
-    required: true,
+    // required: true,
   },
   improvements: [String],
   keywords: {
@@ -116,10 +116,8 @@ const analysisSchema = new Schema<IAnalysis>({
     interests: [String],
     painPoints: [String],
   },
-  rawAnalysis: {
-    type: String,
-    required: true,
-  },
+  rawAnalysis: { type: Schema.Types.Mixed, required: true },
+  result: { type: Schema.Types.Mixed, required: true },
   createdAt: {
     type: Date,
     default: Date.now,

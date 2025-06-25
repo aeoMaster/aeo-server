@@ -265,7 +265,6 @@ export async function compactForAudit(
         modified,
         days_since_modified: daysSince,
       },
-      entity_linking: { wiki_links: wikiLinks },
       e_e_a_t_signals: {
         author_present: authorPresent || jsonLdAuthor,
         outbound_citations: outbound,

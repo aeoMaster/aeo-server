@@ -28,7 +28,7 @@ export async function analyzeHandler(
       url: type === "url" ? content : undefined,
       company: rest.company,
       section: rest.section,
-      ...result,
+      result: result,
       rawAnalysis: analysis,
     });
 

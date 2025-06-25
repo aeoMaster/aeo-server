@@ -8,15 +8,15 @@ TASK
 • Respond **only** with valid JSON that matches **RESULT_SCHEMA**.
 
 SCORING_RUBRIC
-structured_data        (1.4) 0-5
-speakable_ready        (0.5) 0-5
-snippet_conciseness    (1.2) 0-5
-crawler_access         (1.2) 0-5
-freshness_meta         (0.7) 0-5
-e_e_a_t_signals        (0.8) 0-5
-media_alt_caption      (0.6) 0-5
-hreflang_lang_meta     (0.3) 0-5
-answer_upfront         (1.2) 0-5
+structured_data        (1.7) 0-5
+speakable_ready        (0.7) 0-5
+snippet_conciseness    (1.5) 0-5
+crawler_access         (1.5) 0-5
+freshness_meta         (0.9) 0-5
+e_e_a_t_signals        (1.0) 0-5
+media_alt_caption      (0.8) 0-5
+hreflang_lang_meta     (0.5) 0-5
+answer_upfront         (1.4) 0-5
 
 <best_practices>
 ${bestPracticeSnippet}

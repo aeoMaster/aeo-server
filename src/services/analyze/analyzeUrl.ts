@@ -16,11 +16,11 @@ export async function analyzeUrl(url: string, options: any) {
   const bestPracticeSnippet = await getBestPracticeSnippet(RUBRIC_KEYS);
 
   // 4. Build prompts
-    const systemPrompt = buildSystemPrompt(bestPracticeSnippet);
-    const userPrompt = buildUserPrompt(auditParts);
+  const systemPrompt = buildSystemPrompt(bestPracticeSnippet);
+  const userPrompt = buildUserPrompt(auditParts);
 
   // 5. Call OpenAI
-    const auditResult = await callOpenAIAudit(systemPrompt, userPrompt);
+  const auditResult = await callOpenAIAudit(systemPrompt, userPrompt);
 
   // 6. Return result (could also save to DB here)
   return { auditResult, auditParts };
