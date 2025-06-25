@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { z } from "zod";
-import { AppError } from "../middleware/errorHandler";
 import { authenticate } from "../middleware/auth";
 import { UserSettings } from "../models/UserSettings";
 
@@ -16,12 +15,12 @@ const settingsSchema = z.object({
 // Get user settings
 router.get("/", authenticate, async (req, res, next) => {
   try {
-    let settings = await UserSettings.findOne({ user: req.user._id });
+    let settings = await UserSettings.findOne({ user: req.user?._id });
 
     if (!settings) {
       // Create default settings if none exist
       settings = await UserSettings.create({
-        user: req.user._id,
+        user: req.user?._id,
       });
     }
 
@@ -39,7 +38,7 @@ router.put("/", authenticate, async (req, res, next) => {
     );
 
     const settings = await UserSettings.findOneAndUpdate(
-      { user: req.user._id },
+      { user: req.user?._id },
       {
         notifications,
         darkMode,

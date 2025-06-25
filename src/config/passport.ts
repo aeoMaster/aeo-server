@@ -40,14 +40,28 @@ export const initializePassport = (): void => {
     },
     async (_accessToken, _refreshToken, profile, done) => {
       try {
+        // First try to find user by googleId
         let user = await User.findOne({ googleId: profile.id });
 
         if (!user) {
-          user = await User.create({
-            name: profile.displayName,
+          // If not found by googleId, check if user exists with this email
+          const existingUser = await User.findOne({
             email: profile.emails?.[0].value,
-            googleId: profile.id,
           });
+
+          if (existingUser) {
+            // If user exists, update their googleId
+            existingUser.googleId = profile.id;
+            await existingUser.save();
+            user = existingUser;
+          } else {
+            // If no user exists, create new user
+            user = await User.create({
+              name: profile.displayName,
+              email: profile.emails?.[0].value,
+              googleId: profile.id,
+            });
+          }
         }
 
         return done(null, user);
