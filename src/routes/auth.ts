@@ -37,8 +37,19 @@ router.post("/signup", async (req, res, next) => {
     if (!user._id) {
       throw new AppError(500, "User ID not found");
     }
-    // Create free tier subscription and usage records
-    await SubscriptionService.createFreeTierSubscription(user._id.toString());
+
+    try {
+      // Create free tier subscription and usage records
+      await SubscriptionService.createFreeTierSubscription(user._id.toString());
+    } catch (subscriptionError) {
+      console.error("Error creating subscription:", subscriptionError);
+      // Delete the user if subscription creation fails
+      await User.findByIdAndDelete(user._id);
+      throw new AppError(
+        500,
+        "Failed to create user subscription. Please try again."
+      );
+    }
 
     // Generate JWT token
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET as string, {

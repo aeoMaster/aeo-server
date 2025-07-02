@@ -8,75 +8,56 @@ import { Company } from "../models/Company";
 export class SubscriptionService {
   static async getCurrentSubscription(userId: string) {
     try {
-      console.log("userId", userId);
+      console.log("getCurrentSubscription called with userId:", userId);
       let subscription = await Subscription.findOne({ user: userId })
         .populate("package")
         .sort({ createdAt: -1 });
 
-      console.log("subscription", subscription);
+      console.log("Found existing subscription:", subscription);
       if (!subscription) {
+        console.log("No subscription found, creating free tier...");
         // Get the free tier package
         const freePackage = await Package.findOne({ name: "Free" });
-        console.log("freePackage", freePackage);
+        console.log("Free package found:", freePackage);
         if (!freePackage) {
-          throw new AppError(404, "Free tier package not found");
+          // If Free package doesn't exist, create it
+          console.log("Free package not found, creating it...");
+          const newFreePackage = await Package.create({
+            name: "Free",
+            type: "individual",
+            price: {
+              monthly: 0,
+              yearly: 0,
+            },
+            stripePriceId: {
+              monthly: "price_free_monthly",
+              yearly: "price_free_yearly",
+            },
+            features: {
+              maxAnalyses: 2,
+              maxUsers: 1,
+              advancedReporting: false,
+              apiAccess: false,
+              customBranding: false,
+              prioritySupport: false,
+            },
+            status: "active",
+            trialDays: 0,
+          });
+          console.log("Created new free package:", newFreePackage);
+          if (!newFreePackage) {
+            throw new AppError(
+              404,
+              "Free tier package not found and could not be created"
+            );
+          }
         }
 
-        // Create a free subscription
-        subscription = await Subscription.create({
-          user: userId,
-          package: freePackage._id,
-          status: "active",
-          billingCycle: "monthly",
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-          stripeSubscriptionId: `local_${Date.now()}`,
-          stripeCustomerId: `local_${userId}`,
-        });
-
-        // Initialize usage tracking for the free tier
-        await Usage.create({
-          user: userId,
-          type: "analysis",
-          period: {
-            start: new Date(),
-            end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-          },
-          limits: {
-            total: 2, // 2 analyses per month
-            used: 0,
-            remaining: 2,
-          },
-        });
-
-        // Also create usage records for API calls and storage
-        await Usage.create({
-          user: userId,
-          type: "api_call",
-          period: {
-            start: new Date(),
-            end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          },
-          limits: {
-            total: 100, // 100 API calls per month
-            used: 0,
-            remaining: 100,
-          },
-        });
-
-        await Usage.create({
-          user: userId,
-          type: "storage",
-          period: {
-            start: new Date(),
-            end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          },
-          limits: {
-            total: 100, // 100MB storage
-            used: 0,
-            remaining: 100,
-          },
-        });
+        // Create a free subscription using the createFreeTierSubscription method
+        console.log("Creating free tier subscription...");
+        subscription =
+          await SubscriptionService.createFreeTierSubscription(userId);
+        console.log("Created subscription:", subscription);
       }
 
       return subscription;
@@ -286,12 +267,15 @@ export class SubscriptionService {
 
   static async createFreeTierSubscription(userId: string) {
     try {
+      console.log("createFreeTierSubscription called with userId:", userId);
       // Get the free tier package
       const freePackage = await Package.findOne({ name: "Free" });
+      console.log("Free package in createFreeTierSubscription:", freePackage);
       if (!freePackage) {
         throw new AppError(404, "Free tier package not found");
       }
 
+      console.log("Creating subscription record...");
       // Create a free subscription
       const subscription = await Subscription.create({
         user: userId,
@@ -303,7 +287,9 @@ export class SubscriptionService {
         stripeSubscriptionId: `local_${Date.now()}`,
         stripeCustomerId: `local_${userId}`,
       });
+      console.log("Created subscription record:", subscription);
 
+      console.log("Creating usage records...");
       // Initialize usage tracking for all types
       const usageTypes = ["analysis", "api_call", "storage"] as const;
       const usageLimits = {
@@ -313,7 +299,8 @@ export class SubscriptionService {
       };
 
       for (const type of usageTypes) {
-        await Usage.create({
+        console.log(`Creating usage record for type: ${type}`);
+        const usageRecord = await Usage.create({
           user: userId,
           type,
           period: {
@@ -323,12 +310,21 @@ export class SubscriptionService {
           limits: usageLimits[type],
           count: 0,
         });
+        console.log(`Created usage record for ${type}:`, usageRecord);
       }
 
+      console.log("Updating user with subscription reference...");
       // Update user with subscription reference
       await User.findByIdAndUpdate(userId, { subscription: subscription._id });
 
-      return subscription;
+      console.log("Returning populated subscription...");
+      // Return populated subscription
+      const populatedSubscription = await Subscription.findById(
+        subscription._id
+      ).populate("package");
+
+      console.log("Final populated subscription:", populatedSubscription);
+      return populatedSubscription;
     } catch (error) {
       console.error("Error creating free tier subscription:", error);
       throw new AppError(500, "Failed to create free tier subscription");

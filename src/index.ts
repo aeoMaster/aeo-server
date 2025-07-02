@@ -14,6 +14,8 @@ import { companyRoutes } from "./routes/company";
 import { usageRoutes } from "./routes/usage";
 import { packageRoutes } from "./routes/package";
 import { siteAnalysisRoutes } from "./routes/siteAnalysis";
+import { blogRoutes } from "./routes/blog";
+import { oauthRoutes } from "./routes/oauth";
 
 // Load environment variables FIRST
 dotenv.config();
@@ -49,6 +51,8 @@ app.use("/api/company", companyRoutes);
 app.use("/api/usage", usageRoutes);
 app.use("/api/packages", packageRoutes);
 app.use("/api/site", siteAnalysisRoutes);
+app.use("/api/blogs", blogRoutes);
+app.use("/api/oauth", oauthRoutes);
 
 // Error handling
 app.use(errorHandler);
