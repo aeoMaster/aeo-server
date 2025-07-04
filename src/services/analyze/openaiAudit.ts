@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 dotenv.config();
 
 const apiKey = process.env.OPENAI_API_KEY;
@@ -16,7 +16,7 @@ export async function callOpenAIAudit(
 ) {
   // Call OpenAI API with the prompts and return the result
   const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: "gpt-4.1-mini",
     temperature: 0,
     max_tokens: 1000,
     response_format: { type: "json_object" },
