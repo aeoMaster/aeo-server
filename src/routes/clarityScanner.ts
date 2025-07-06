@@ -7,12 +7,12 @@ const router = Router();
 // Public routes (no authentication required)
 router.get("/scan", ClarityScannerController.scanUrl);
 router.get("/scan/:id", ClarityScannerController.getScanById);
+router.get("/history", ClarityScannerController.getScanHistory);
 
 // Protected routes (authentication required)
 router.use(authenticate);
 
-// Scan history and management
-router.get("/history", ClarityScannerController.getScanHistory);
+// Scan management (requires authentication)
 router.get("/scan/:id/html", ClarityScannerController.getScanWithHtml);
 router.delete("/scan/:id", ClarityScannerController.deleteScan);
 

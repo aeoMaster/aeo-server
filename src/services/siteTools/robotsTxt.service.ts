@@ -7,15 +7,103 @@ interface Rule {
   disallow: string[];
 }
 
+interface BotAccess {
+  bot: string;
+  reason: string;
+  suggestedFix: string;
+}
+
 interface RobotsTxt {
   sitemaps: string[];
   rules: Rule[];
+  access: Record<string, boolean>;
+  seo: boolean;
+  aeo: boolean;
+  recommendations: BotAccess[];
+}
+
+// Important bots to check for SEO and AEO
+const importantBots = {
+  seo: ["Googlebot", "Bingbot", "Yandex", "DuckDuckBot", "Baiduspider", "*"],
+  aeo: [
+    "GPTBot",
+    "ChatGPT-User",
+    "OAI-SearchBot",
+    "ClaudeBot",
+    "Google-Extended",
+    "Gemini", // alias for Google-Extended
+    "PerplexityBot",
+    "CCbot",
+  ],
+};
+
+// Bot aliases for normalization
+const botAliases: Record<string, string> = {
+  Gemini: "Google-Extended",
+};
+
+/**
+ * Checks if a bot has access based on robots.txt rules
+ */
+function checkBotAccess(botName: string, rules: Rule[]): boolean {
+  // Normalize bot name
+  const normalizedBot = botAliases[botName] || botName;
+
+  // Find specific rules for this bot
+  const botRules = rules.filter(
+    (rule) =>
+      rule.useragent.toLowerCase() === normalizedBot.toLowerCase() ||
+      rule.useragent === "*"
+  );
+
+  if (botRules.length === 0) {
+    return true; // No specific rules, default to allowed
+  }
+
+  // Check if any rule blocks the root path
+  for (const rule of botRules) {
+    if (rule.disallow.some((path) => path === "/" || path === "")) {
+      return false; // Blocked
+    }
+  }
+
+  return true; // Not explicitly blocked
+}
+
+/**
+ * Generates recommendations for blocked bots
+ */
+function generateRecommendations(access: Record<string, boolean>): BotAccess[] {
+  const recommendations: BotAccess[] = [];
+
+  const blockedBots = Object.entries(access).filter(
+    ([_, hasAccess]) => !hasAccess
+  );
+
+  for (const [bot, _] of blockedBots) {
+    let reason = "";
+    let suggestedFix = "";
+
+    if (importantBots.seo.includes(bot)) {
+      reason = `${bot} is blocked from crawling the site, which reduces visibility in search engines.`;
+      suggestedFix = `In robots.txt, ensure ${bot} is not blocked:\nUser-agent: ${bot}\nAllow: /`;
+    } else if (importantBots.aeo.includes(bot)) {
+      reason = `${bot} is blocked from crawling the site, which reduces visibility in AI tools like ChatGPT.`;
+      suggestedFix = `In robots.txt, add:\nUser-agent: ${bot}\nAllow: /`;
+    }
+
+    if (reason) {
+      recommendations.push({ bot, reason, suggestedFix });
+    }
+  }
+
+  return recommendations;
 }
 
 /**
  * Fetches and parses the robots.txt file for a given domain.
  * @param domainUrl The URL of the domain to check (e.g., "https://www.example.com").
- * @returns A structured object with sitemap URLs and rules grouped by user-agent.
+ * @returns A structured object with sitemap URLs, rules, and bot access analysis.
  */
 export const getRobotsTxt = async (
   domainUrl: string
@@ -31,7 +119,19 @@ export const getRobotsTxt = async (
 
   if (!response.data || response.status !== 200) {
     console.log(`No robots.txt found or accessible at ${robotsUrl}.`);
-    return { sitemaps: [], rules: [] };
+    // Default to allowing all bots when no robots.txt is found
+    const allBots = [...importantBots.seo, ...importantBots.aeo];
+    const access: Record<string, boolean> = {};
+    allBots.forEach((bot) => (access[bot] = true));
+
+    return {
+      sitemaps: [],
+      rules: [],
+      access,
+      seo: true,
+      aeo: true,
+      recommendations: [],
+    };
   }
 
   const lines = response.data.split("\n");
@@ -76,5 +176,20 @@ export const getRobotsTxt = async (
     }
   });
 
-  return { sitemaps, rules };
+  // Analyze bot access
+  const allBots = [...importantBots.seo, ...importantBots.aeo];
+  const access: Record<string, boolean> = {};
+
+  allBots.forEach((bot) => {
+    access[bot] = checkBotAccess(bot, rules);
+  });
+
+  // Determine overall SEO and AEO access
+  const seo = importantBots.seo.every((bot) => access[bot]);
+  const aeo = importantBots.aeo.every((bot) => access[bot]);
+
+  // Generate recommendations
+  const recommendations = generateRecommendations(access);
+
+  return { sitemaps, rules, access, seo, aeo, recommendations };
 };

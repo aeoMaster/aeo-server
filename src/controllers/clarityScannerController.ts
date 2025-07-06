@@ -64,9 +64,8 @@ export class ClarityScannerController {
 
       // Get total count for pagination
       const ClarityScan = (await import("../models/ClarityScan")).ClarityScan;
-      const totalCount = await ClarityScan.countDocuments(
-        userId ? { user: userId } : {}
-      );
+      const query = userId ? { user: userId } : {};
+      const totalCount = await ClarityScan.countDocuments(query);
 
       // Get paginated results
       const scanHistory = await ClarityScannerService.getScanHistory(
