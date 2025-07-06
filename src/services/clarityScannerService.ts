@@ -876,13 +876,56 @@ export class ClarityScannerService {
     userId?: string,
     limit: number = 10,
     skip: number = 0
-  ): Promise<IClarityScan[]> {
+  ): Promise<Array<IClarityScan & { scanCount: number }>> {
+    // Alias for the grouped method - now the default behavior
+    return this.getScanHistoryGroupedByUrl(userId, limit, skip);
+  }
+
+  static async getScanHistoryGroupedByUrl(
+    userId?: string,
+    limit: number = 10,
+    skip: number = 0
+  ): Promise<Array<IClarityScan & { scanCount: number }>> {
+    const ClarityScan = (await import("../models/ClarityScan")).ClarityScan;
     const query = userId ? { user: userId } : {};
-    return await (await import("../models/ClarityScan")).ClarityScan.find(query)
-      .select("-htmlSnapshot")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+
+    // Use MongoDB aggregation to group by URL and get the latest scan for each
+    const pipeline = [
+      { $match: query },
+      {
+        $group: {
+          _id: "$url",
+          latestScan: { $first: "$$ROOT" },
+          scanCount: { $sum: 1 },
+          firstScan: { $min: "$createdAt" },
+          lastScan: { $max: "$createdAt" },
+        },
+      },
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: [
+              "$latestScan",
+              {
+                scanCount: "$scanCount",
+                firstScan: "$firstScan",
+                lastScan: "$lastScan",
+              },
+            ],
+          },
+        },
+      },
+      { $sort: { lastScan: -1 as const } },
+      { $skip: skip },
+      { $limit: limit },
+      {
+        $project: {
+          htmlSnapshot: 0, // Exclude HTML snapshot to save bandwidth
+        },
+      },
+    ];
+
+    return await ClarityScan.aggregate(pipeline);
   }
 
   static async getScanById(
@@ -893,5 +936,27 @@ export class ClarityScannerService {
     return await (
       await import("../models/ClarityScan")
     ).ClarityScan.findOne(query);
+  }
+
+  static async getScanCountForUrl(
+    url: string,
+    userId?: string
+  ): Promise<number> {
+    const query = userId ? { url, user: userId } : { url };
+    return await (
+      await import("../models/ClarityScan")
+    ).ClarityScan.countDocuments(query);
+  }
+
+  static async getScansForUrl(
+    url: string,
+    userId?: string,
+    limit: number = 10
+  ): Promise<IClarityScan[]> {
+    const query = userId ? { url, user: userId } : { url };
+    return await (await import("../models/ClarityScan")).ClarityScan.find(query)
+      .select("-htmlSnapshot")
+      .sort({ createdAt: -1 })
+      .limit(limit);
   }
 }

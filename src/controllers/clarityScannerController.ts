@@ -16,7 +16,11 @@ interface PaginationState {
 }
 
 interface ClarityScanHistoryResponse {
-  scans: IClarityScan[];
+  scans: (IClarityScan & {
+    scanCount?: number;
+    firstScan?: Date;
+    lastScan?: Date;
+  })[];
   pagination: PaginationState;
 }
 
@@ -61,18 +65,26 @@ export class ClarityScannerController {
       const page = req.query.page ? parseInt(req.query.page as string) : 1;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
       const skip = (page - 1) * limit;
-
-      // Get total count for pagination
       const ClarityScan = (await import("../models/ClarityScan")).ClarityScan;
       const query = userId ? { user: userId } : {};
-      const totalCount = await ClarityScan.countDocuments(query);
 
-      // Get paginated results
-      const scanHistory = await ClarityScannerService.getScanHistory(
-        userId,
-        limit,
-        skip
-      );
+      // Always get grouped results (latest scan per URL)
+      const scanHistory =
+        await ClarityScannerService.getScanHistoryGroupedByUrl(
+          userId,
+          limit,
+          skip
+        );
+
+      // Get total count of unique URLs
+      const uniqueUrlsPipeline = [
+        { $match: query },
+        { $group: { _id: "$url" } },
+        { $count: "total" },
+      ];
+      const uniqueUrlsResult = await ClarityScan.aggregate(uniqueUrlsPipeline);
+      const totalCount =
+        uniqueUrlsResult.length > 0 ? uniqueUrlsResult[0].total : 0;
 
       // Calculate pagination info
       const totalPages = Math.ceil(totalCount / limit);
@@ -178,6 +190,34 @@ export class ClarityScannerController {
       }
 
       return res.json({ message: "Scan deleted successfully" });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  static async getScansForUrl(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { url } = req.params;
+      const userId = (req.user as any)?._id;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+
+      const scans = await ClarityScannerService.getScansForUrl(
+        decodeURIComponent(url),
+        userId,
+        limit
+      );
+
+      const scanCount = await ClarityScannerService.getScanCountForUrl(
+        decodeURIComponent(url),
+        userId
+      );
+
+      return res.json({
+        url: decodeURIComponent(url),
+        scans,
+        totalCount: scanCount,
+        limit,
+      });
     } catch (error) {
       return next(error);
     }

@@ -8,6 +8,7 @@ const router = Router();
 router.get("/scan", ClarityScannerController.scanUrl);
 router.get("/scan/:id", ClarityScannerController.getScanById);
 router.get("/history", ClarityScannerController.getScanHistory);
+router.get("/url/:url", ClarityScannerController.getScansForUrl);
 
 // Protected routes (authentication required)
 router.use(authenticate);
