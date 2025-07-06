@@ -16,6 +16,7 @@ import { packageRoutes } from "./routes/package";
 import { siteAnalysisRoutes } from "./routes/siteAnalysis";
 import { blogRoutes } from "./routes/blog";
 import { oauthRoutes } from "./routes/oauth";
+import { clarityScannerRoutes } from "./routes/clarityScanner";
 
 // Load environment variables FIRST
 dotenv.config();
@@ -53,6 +54,7 @@ app.use("/api/packages", packageRoutes);
 app.use("/api/site", siteAnalysisRoutes);
 app.use("/api/blogs", blogRoutes);
 app.use("/api/oauth", oauthRoutes);
+app.use("/api/clarity-scan", clarityScannerRoutes);
 
 // Error handling
 app.use(errorHandler);
