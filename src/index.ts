@@ -17,6 +17,7 @@ import { siteAnalysisRoutes } from "./routes/siteAnalysis";
 import { blogRoutes } from "./routes/blog";
 import { oauthRoutes } from "./routes/oauth";
 import { clarityScannerRoutes } from "./routes/clarityScanner";
+import redditRoutes from "./routes/reddit";
 
 // Load environment variables FIRST
 dotenv.config();
@@ -55,6 +56,7 @@ app.use("/api/site", siteAnalysisRoutes);
 app.use("/api/blogs", blogRoutes);
 app.use("/api/oauth", oauthRoutes);
 app.use("/api/clarity-scan", clarityScannerRoutes);
+app.use("/api/reddit", redditRoutes);
 
 // Error handling
 app.use(errorHandler);
