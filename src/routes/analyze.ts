@@ -12,6 +12,9 @@ router.post("/", authenticate, analyzeHandler);
 // Get analysis history
 router.get("/history", authenticate, AnalysisController.getHistory);
 
+// Get all analyses for a specific URL
+router.get("/url/:url", authenticate, AnalysisController.getAnalysesForUrl);
+
 // Get single analysis
 router.get("/:id", authenticate, async (req, res, next) => {
   try {
@@ -20,8 +23,6 @@ router.get("/:id", authenticate, async (req, res, next) => {
       _id: req.params.id,
       user: userId,
     });
-
-    console.log("analysis", analysis);
 
     if (!analysis) {
       throw new AppError(404, "Analysis not found");

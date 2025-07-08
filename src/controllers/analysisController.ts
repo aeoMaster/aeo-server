@@ -26,6 +26,10 @@ const historyQuerySchema = z.object({
     .string()
     .optional()
     .transform((val) => (val ? parseInt(val) : 10)),
+  grouped: z
+    .string()
+    .optional()
+    .transform((val) => val === "true"),
 });
 
 export class AnalysisController {
@@ -50,13 +54,40 @@ export class AnalysisController {
         endDate,
         page,
         limit,
+        grouped,
       } = queryParams;
 
       const result = await AnalysisService.getAnalysisHistory(
         userId,
         { search, type, company, section, startDate, endDate },
-        { page, limit }
+        { page, limit },
+        grouped
       );
+
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getAnalysesForUrl(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const user: IUser = req.user as IUser;
+      const userId = user._id.toString();
+      const encodedUrl = req.params.url;
+      const url = decodeURIComponent(encodedUrl);
+
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+
+      const result = await AnalysisService.getAnalysesForUrl(userId, url, {
+        page,
+        limit,
+      });
 
       res.json(result);
     } catch (error) {

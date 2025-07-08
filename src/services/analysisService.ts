@@ -1,5 +1,6 @@
 import { Analysis } from "../models/Analysis";
 import { AppError } from "../middleware/errorHandler";
+import mongoose from "mongoose";
 
 interface AnalysisFilters {
   search?: string;
@@ -27,14 +28,23 @@ interface AnalysisHistoryResult {
 
 export class AnalysisService {
   static async getAnalysisHistory(
-    userId: string,
+    userId?: string,
     filters: AnalysisFilters = {},
-    pagination: PaginationOptions = { page: 1, limit: 10 }
+    pagination: PaginationOptions = { page: 1, limit: 10 },
+    grouped: boolean = false
   ): Promise<AnalysisHistoryResult> {
     try {
-      const query: Record<string, any> = { user: userId };
+      const query: Record<string, any> = {};
+      if (userId) {
+        // Convert string userId to ObjectId if it's a valid ObjectId
+        try {
+          query.user = new mongoose.Types.ObjectId(userId);
+        } catch (error) {
+          // If conversion fails, use the string as is
+          query.user = userId;
+        }
+      }
 
-      // Apply search filter
       if (filters.search) {
         query.$or = [
           { content: { $regex: filters.search, $options: "i" } },
@@ -43,7 +53,6 @@ export class AnalysisService {
         ];
       }
 
-      // Apply other filters
       if (filters.type) query.type = filters.type;
       if (filters.company) query.company = filters.company;
       if (filters.section) query.section = filters.section;
@@ -53,13 +62,81 @@ export class AnalysisService {
         if (filters.endDate) query.createdAt.$lte = filters.endDate;
       }
 
-      // Calculate skip value for pagination
       const skip = (pagination.page - 1) * pagination.limit;
 
-      // Get total count for pagination
+      let analyses: any[];
+      let total: number;
+
+      if (grouped) {
+        const groupedResults = await Analysis.aggregate([
+          { $match: query },
+          {
+            $group: {
+              _id: "$url",
+              latestAnalysis: { $first: "$$ROOT" },
+              scanCount: { $sum: 1 },
+              firstScan: { $min: "$createdAt" },
+              lastScan: { $max: "$createdAt" },
+            },
+          },
+          { $sort: { "latestAnalysis.createdAt": -1 } },
+          { $skip: skip },
+          { $limit: pagination.limit },
+        ]);
+
+        const totalGroups = await Analysis.aggregate([
+          { $match: query },
+          { $group: { _id: "$url" } },
+          { $count: "total" },
+        ]);
+
+        total = totalGroups[0]?.total || 0;
+        analyses = groupedResults.map((group) => ({
+          ...group.latestAnalysis,
+          scanCount: group.scanCount,
+          firstScan: group.firstScan,
+          lastScan: group.lastScan,
+        }));
+      } else {
+        total = await Analysis.countDocuments(query);
+
+        analyses = await Analysis.find(query)
+          .sort({ createdAt: -1 })
+          .select("-rawAnalysis")
+          .skip(skip)
+          .limit(pagination.limit);
+      }
+
+      return {
+        analyses,
+        pagination: {
+          total,
+          page: pagination.page,
+          limit: pagination.limit,
+          totalPages: Math.ceil(total / pagination.limit),
+        },
+      };
+    } catch (error) {
+      throw new AppError(500, "Failed to fetch analysis history");
+    }
+  }
+
+  static async getAnalysesForUrl(
+    userId: string,
+    url: string,
+    pagination: PaginationOptions = { page: 1, limit: 10 }
+  ): Promise<AnalysisHistoryResult> {
+    try {
+      const query: any = { url: url };
+
+      if (userId && userId !== "test-user") {
+        query.user = userId;
+      }
+
+      const skip = (pagination.page - 1) * pagination.limit;
+
       const total = await Analysis.countDocuments(query);
 
-      // Get paginated results
       const analyses = await Analysis.find(query)
         .sort({ createdAt: -1 })
         .select("-rawAnalysis")
@@ -76,7 +153,8 @@ export class AnalysisService {
         },
       };
     } catch (error) {
-      throw new AppError(500, "Failed to fetch analysis history");
+      console.error("Error in getAnalysesForUrl:", error);
+      throw new AppError(500, "Failed to fetch analyses for URL");
     }
   }
 }
