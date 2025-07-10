@@ -170,7 +170,6 @@ export class ClarityScannerService {
     // Check heading hierarchy
     const headings = $("h1, h2, h3, h4, h5, h6");
     let previousLevel = 0;
-    let hasH2 = false;
 
     headings.each((_, element) => {
       const level = parseInt((element as any).tagName.charAt(1));
@@ -185,7 +184,6 @@ export class ClarityScannerService {
         });
         failed.push("Invalid heading hierarchy");
       }
-      if (level === 2) hasH2 = true;
       previousLevel = level;
     });
 
@@ -775,7 +773,7 @@ export class ClarityScannerService {
 
   private static async checkBrokenLinks(
     $: cheerio.CheerioAPI,
-    baseUrl: string
+    _baseUrl: string
   ): Promise<number> {
     const links = $("a[href^='http']");
     let brokenCount = 0;

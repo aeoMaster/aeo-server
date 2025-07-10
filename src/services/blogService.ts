@@ -1,5 +1,4 @@
 import { Blog, IBlog } from "../models/Blog";
-import { PlatformToken } from "../models/PlatformToken";
 import { AppError } from "../middleware/errorHandler";
 import { LinkedInService } from "./platforms/linkedinService";
 import mongoose from "mongoose";

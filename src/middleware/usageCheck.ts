@@ -6,7 +6,7 @@ import { IUser } from "../models/User";
 export const checkUsage = (
   feature: "analysis" | "clarity_scan" | "chat_message" | "members"
 ) => {
-  return async (req: Request, res: Response, next: NextFunction) => {
+  return async (req: Request, _res: Response, next: NextFunction) => {
     try {
       const user = req.user as IUser;
 

@@ -3,7 +3,7 @@ import { PackageService } from "../services/packageService";
 import { AppError } from "../middleware/errorHandler";
 
 export class PackageController {
-  static async list(req: Request, res: Response, next: NextFunction) {
+  static async list(_req: Request, res: Response, next: NextFunction) {
     try {
       const packages = await PackageService.list();
       res.json(packages);

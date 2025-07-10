@@ -5,7 +5,7 @@ import { buildSystemPrompt, buildUserPrompt } from "./prompts";
 import { callOpenAIAudit } from "./openaiAudit";
 import { RUBRIC_KEYS } from "../../types/analyze";
 
-export async function analyzeUrl(url: string, options: any) {
+export async function analyzeUrl(url: string, _options: any) {
   // 1. Fetch HTML and robots.txt
   const { html, robots } = await fetchUrlAssets(url);
 

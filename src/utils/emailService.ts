@@ -34,8 +34,10 @@ export const sendEmail = async ({ to, subject, template, data }: EmailData) => {
     };
 
     await sgMail.send(msg);
+    return { success: true };
   } catch (error) {
     console.error("Error sending email via SendGrid", error);
     // Swallow the error in mock/dev mode so flow continues
+    return { success: false, error };
   }
 };

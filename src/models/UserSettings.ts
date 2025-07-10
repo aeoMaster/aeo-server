@@ -1,8 +1,7 @@
 import mongoose, { Document, Schema } from "mongoose";
-import { IUser } from "./User";
 
 export interface IUserSettings extends Document {
-  user: IUser["_id"];
+  user: mongoose.Types.ObjectId;
   notifications: boolean;
   darkMode: boolean;
   language: string;
@@ -40,7 +39,7 @@ const userSettingsSchema = new Schema<IUserSettings>({
 });
 
 // Update the updatedAt timestamp before saving
-userSettingsSchema.pre("save", function (next) {
+userSettingsSchema.pre("save", function (this: any, next) {
   this.updatedAt = new Date();
   next();
 });

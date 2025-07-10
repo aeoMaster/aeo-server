@@ -170,11 +170,11 @@ export class OAuthController {
       );
 
       if (blogId) {
-        res.redirect(
+        return res.redirect(
           `${frontendUrl}/dashboard/blogs/${blogId}?platform=linkedin`
         );
       } else {
-        res.redirect(`${frontendUrl}/dashboard/blogs?platform=linkedin`);
+        return res.redirect(`${frontendUrl}/dashboard/blogs?platform=linkedin`);
       }
     } catch (error) {
       next(error);
@@ -318,7 +318,7 @@ export class OAuthController {
           .json({ message: `${platform} account not connected` });
       }
 
-      res.json({
+      return res.json({
         platform: token.platform,
         platformUsername: token.platformUsername,
         lastUsed: token.lastUsed,
@@ -328,7 +328,7 @@ export class OAuthController {
         createdAt: token.createdAt,
       });
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 }

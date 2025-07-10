@@ -131,9 +131,9 @@ export class BlogController {
         });
       }
 
-      res.json(blog);
+      return res.json(blog);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 

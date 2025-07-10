@@ -21,7 +21,7 @@ export const initializePassport = (): void => {
         try {
           const user = await User.findById(payload.id);
           if (user) {
-            return done(null, user);
+            return done(null, user as any);
           }
           return done(null, false);
         } catch (error) {
@@ -64,7 +64,7 @@ export const initializePassport = (): void => {
           }
         }
 
-        return done(null, user);
+        return done(null, user as any);
       } catch (error) {
         return done(error, false);
       }

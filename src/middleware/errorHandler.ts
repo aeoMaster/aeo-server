@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from "express";
 
 export class AppError extends Error {
   constructor(
@@ -13,22 +13,22 @@ export class AppError extends Error {
 
 export const errorHandler = (
   err: Error | AppError,
-  req: Request,
+  _req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void => {
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
-      status: 'error',
+      status: "error",
       message: err.message,
-      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+      ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
     });
   } else {
-    console.error('Unexpected error:', err);
+    console.error("Unexpected error:", err);
     res.status(500).json({
-      status: 'error',
-      message: 'Internal server error',
-      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+      status: "error",
+      message: "Internal server error",
+      ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
     });
   }
-}; 
+};

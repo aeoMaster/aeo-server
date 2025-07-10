@@ -53,7 +53,7 @@ export class SubscriptionController {
   }
 
   static async getPlans(
-    req: Request,
+    _req: Request,
     res: Response,
     next: NextFunction
   ): Promise<void> {
@@ -66,12 +66,12 @@ export class SubscriptionController {
   }
 
   static async handleWebhook(
-    req: Request,
+    _req: Request,
     res: Response,
     next: NextFunction
   ): Promise<void> {
     try {
-      const event = req.body;
+      const event = _req.body;
       const result = await SubscriptionService.handleWebhook(event);
       res.json(result);
     } catch (error) {

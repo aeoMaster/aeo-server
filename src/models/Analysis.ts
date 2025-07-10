@@ -1,8 +1,7 @@
 import mongoose, { Document, Schema } from "mongoose";
-import { IUser } from "./User";
 
 export interface IAnalysis extends Document {
-  user: IUser["_id"];
+  user: mongoose.Types.ObjectId;
   type: "content" | "url";
   content?: string;
   url?: string;
@@ -117,7 +116,6 @@ const analysisSchema = new Schema<IAnalysis>({
     painPoints: [String],
   },
   rawAnalysis: { type: Schema.Types.Mixed, required: true },
-  result: { type: Schema.Types.Mixed, required: true },
   createdAt: {
     type: Date,
     default: Date.now,

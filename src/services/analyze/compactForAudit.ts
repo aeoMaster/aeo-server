@@ -227,7 +227,7 @@ export async function compactForAudit(
   const article = reader.parse();
   const $ = cheerio.load(article?.content || html);
 
-  const { wikiLinks, outbound } = annotateLinksAndStats($full, url);
+  const { outbound } = annotateLinksAndStats($full, url);
   const authorPresent = extractAuthor($full);
   const { schemaSnippets, jsonLdTypes, speakableBlocks, jsonLdAuthor } =
     extractSchema($full, schemaCap);
@@ -237,7 +237,7 @@ export async function compactForAudit(
   const { badAlts } = extractImages($full);
   const headings = extractHeadings($full);
   const finalText = extractText(article, $, maxWords);
-  const { firstParaWords, avgSentence } = extractConciseness($full, finalText);
+  const { avgSentence } = extractConciseness($full, finalText);
   const longHeadings = countLongHeadings($full);
   const { published, modified, daysSince } = extractFreshness($full);
   const { canonicalTags, hreflangTags, htmlLang } = extractLangMeta($full);
