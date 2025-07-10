@@ -3,7 +3,7 @@ import { upsertPackage } from "../services/packageService";
 export const seedPackages = async () => {
   try {
     await upsertPackage("Free", {
-      description: "Free tier with limited features",
+      description: "Try it out — no credit card required",
       type: "individual",
       price: {
         monthly: 0,
@@ -16,48 +16,106 @@ export const seedPackages = async () => {
       billingCycle: "monthly",
       features: {
         maxAnalyses: 2,
+        maxClarityScans: 5,
+        maxChatMessages: 0,
         maxUsers: 1,
         advancedReporting: false,
         apiAccess: false,
         customBranding: false,
         prioritySupport: false,
+        aiChatAdvisor: false,
+        businessImpactEstimates: false,
+        whiteLabeledReports: false,
+        goalSetting: false,
+        customDashboards: false,
+        teamManagement: false,
+        exportableReports: false,
+        advancedImplementationTracking: false,
+        slaSupport: false,
         features: {},
       },
       status: "active",
       trialDays: 0,
     });
 
-    await upsertPackage("Base", {
-      description: "Free tier with limited features",
+    await upsertPackage("Starter", {
+      description: "Perfect for individuals and small websites",
       type: "individual",
       price: {
         monthly: 29,
-        yearly: 290,
+        yearly: 299, // 29 * 10.5
       },
       stripePriceId: {
-        monthly: "price_base_monthly",
-        yearly: "price_base_yearly",
+        monthly: "price_starter_monthly",
+        yearly: "price_starter_yearly",
       },
       billingCycle: "monthly",
       features: {
-        maxAnalyses: 10,
-        maxUsers: 3,
+        maxAnalyses: 15,
+        maxClarityScans: 30,
+        maxChatMessages: 75,
+        maxUsers: 1,
         advancedReporting: false,
         apiAccess: false,
         customBranding: false,
         prioritySupport: false,
+        aiChatAdvisor: "basic",
+        businessImpactEstimates: false,
+        whiteLabeledReports: false,
+        goalSetting: false,
+        customDashboards: false,
+        teamManagement: false,
+        exportableReports: false,
+        advancedImplementationTracking: false,
+        slaSupport: false,
         features: {},
       },
       status: "active",
-      trialDays: 0,
+      trialDays: 3,
+    });
+
+    await upsertPackage("Growth", {
+      description: "For growing teams and ambitious marketers",
+      type: "company",
+      price: {
+        monthly: 79,
+        yearly: 829, // 79 * 10.5
+      },
+      stripePriceId: {
+        monthly: "price_growth_monthly",
+        yearly: "price_growth_yearly",
+      },
+      billingCycle: "monthly",
+      features: {
+        maxAnalyses: 50,
+        maxClarityScans: 80,
+        maxChatMessages: 200,
+        maxUsers: 3,
+        advancedReporting: true,
+        apiAccess: false,
+        customBranding: false,
+        prioritySupport: true,
+        aiChatAdvisor: "strategic",
+        businessImpactEstimates: true,
+        whiteLabeledReports: false,
+        goalSetting: false,
+        customDashboards: false,
+        teamManagement: false,
+        exportableReports: true,
+        advancedImplementationTracking: false,
+        slaSupport: false,
+        features: {},
+      },
+      status: "active",
+      trialDays: 5,
     });
 
     await upsertPackage("Pro", {
-      description: "Professional tier with advanced features",
+      description: "Ideal for agencies and consultants",
       type: "company",
       price: {
-        monthly: 99,
-        yearly: 990,
+        monthly: 129,
+        yearly: 1359, // 129 * 10.5
       },
       stripePriceId: {
         monthly: "price_pro_monthly",
@@ -65,24 +123,71 @@ export const seedPackages = async () => {
       },
       billingCycle: "monthly",
       features: {
-        maxAnalyses: 50,
-        maxUsers: 10,
+        maxAnalyses: 100,
+        maxClarityScans: 200,
+        maxChatMessages: 400,
+        maxUsers: 5,
         advancedReporting: true,
-        apiAccess: true,
+        apiAccess: false,
         customBranding: true,
         prioritySupport: true,
+        aiChatAdvisor: "strategic",
+        businessImpactEstimates: true,
+        whiteLabeledReports: true,
+        goalSetting: true,
+        customDashboards: false,
+        teamManagement: false,
+        exportableReports: true,
+        advancedImplementationTracking: false,
+        slaSupport: false,
         features: {},
       },
       status: "active",
-      trialDays: 14,
+      trialDays: 5,
     });
 
-    await upsertPackage("Enterprise", {
-      description: "Enterprise tier with unlimited features",
+    await upsertPackage("Business", {
+      description: "For high-scale operations and data-driven teams",
       type: "company",
       price: {
         monthly: 199,
-        yearly: 1990,
+        yearly: 2089, // 199 * 10.5
+      },
+      stripePriceId: {
+        monthly: "price_business_monthly",
+        yearly: "price_business_yearly",
+      },
+      billingCycle: "monthly",
+      features: {
+        maxAnalyses: 150,
+        maxClarityScans: 500,
+        maxChatMessages: 750,
+        maxUsers: 10,
+        advancedReporting: true,
+        apiAccess: false,
+        customBranding: true,
+        prioritySupport: true,
+        aiChatAdvisor: "strategic",
+        businessImpactEstimates: true,
+        whiteLabeledReports: true,
+        goalSetting: true,
+        customDashboards: true,
+        teamManagement: true,
+        exportableReports: true,
+        advancedImplementationTracking: true,
+        slaSupport: true,
+        features: {},
+      },
+      status: "active",
+      trialDays: 7,
+    });
+
+    await upsertPackage("Enterprise", {
+      description: "Custom AI tailored to your business",
+      type: "company",
+      price: {
+        monthly: 0, // Custom pricing
+        yearly: 0, // Custom pricing
       },
       stripePriceId: {
         monthly: "price_enterprise_monthly",
@@ -90,16 +195,31 @@ export const seedPackages = async () => {
       },
       billingCycle: "monthly",
       features: {
-        maxAnalyses: 100, // Effectively unlimited
-        maxUsers: 50,
+        maxAnalyses: -1, // Unlimited
+        maxClarityScans: -1, // Unlimited
+        maxChatMessages: -1, // Unlimited
+        maxUsers: -1, // Unlimited
         advancedReporting: true,
-        apiAccess: true,
+        apiAccess: false,
         customBranding: true,
         prioritySupport: true,
-        features: {},
+        aiChatAdvisor: "custom",
+        businessImpactEstimates: true,
+        whiteLabeledReports: true,
+        goalSetting: true,
+        customDashboards: true,
+        teamManagement: true,
+        exportableReports: true,
+        advancedImplementationTracking: true,
+        slaSupport: true,
+        features: {
+          dedicatedAccountManager: true,
+          teamTraining: true,
+          privateOnboarding: true,
+        },
       },
       status: "active",
-      trialDays: 30,
+      trialDays: 14,
     });
 
     console.log("Packages synced ✔︎");

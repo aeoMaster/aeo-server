@@ -9,11 +9,22 @@ export interface IPackage extends Document {
   };
   features: {
     maxAnalyses: number;
+    maxClarityScans: number;
+    maxChatMessages: number;
     maxUsers?: number;
     advancedReporting: boolean;
     apiAccess: boolean;
     customBranding: boolean;
     prioritySupport: boolean;
+    aiChatAdvisor: false | "basic" | "strategic" | "custom";
+    businessImpactEstimates: boolean;
+    whiteLabeledReports: boolean;
+    goalSetting: boolean;
+    customDashboards: boolean;
+    teamManagement: boolean;
+    exportableReports: boolean;
+    advancedImplementationTracking: boolean;
+    slaSupport: boolean;
     features: Record<string, boolean>;
   };
   trialDays: number;
@@ -53,11 +64,21 @@ const packageSchema = new Schema<IPackage>({
     maxAnalyses: {
       type: Number,
       required: true,
-      min: 0,
+      min: -1, // -1 for unlimited
+    },
+    maxClarityScans: {
+      type: Number,
+      required: true,
+      min: -1, // -1 for unlimited
+    },
+    maxChatMessages: {
+      type: Number,
+      required: true,
+      min: -1, // -1 for unlimited
     },
     maxUsers: {
       type: Number,
-      min: 1,
+      min: -1, // -1 for unlimited
     },
     advancedReporting: {
       type: Boolean,
@@ -72,6 +93,43 @@ const packageSchema = new Schema<IPackage>({
       default: false,
     },
     prioritySupport: {
+      type: Boolean,
+      default: false,
+    },
+    aiChatAdvisor: {
+      type: String,
+      enum: [false, "basic", "strategic", "custom"],
+      default: false,
+    },
+    businessImpactEstimates: {
+      type: Boolean,
+      default: false,
+    },
+    whiteLabeledReports: {
+      type: Boolean,
+      default: false,
+    },
+    goalSetting: {
+      type: Boolean,
+      default: false,
+    },
+    customDashboards: {
+      type: Boolean,
+      default: false,
+    },
+    teamManagement: {
+      type: Boolean,
+      default: false,
+    },
+    exportableReports: {
+      type: Boolean,
+      default: false,
+    },
+    advancedImplementationTracking: {
+      type: Boolean,
+      default: false,
+    },
+    slaSupport: {
       type: Boolean,
       default: false,
     },

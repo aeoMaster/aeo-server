@@ -98,6 +98,25 @@ export class SubscriptionController {
     }
   }
 
+  static async updatePackage(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { subscriptionId } = req.params;
+      const { packageId } = req.body;
+
+      const subscription = await SubscriptionService.updateSubscriptionPackage(
+        subscriptionId,
+        packageId
+      );
+      res.json(subscription);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async handlePayment(
     req: Request,
     res: Response,

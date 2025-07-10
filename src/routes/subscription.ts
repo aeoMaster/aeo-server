@@ -27,6 +27,13 @@ router.put(
   SubscriptionController.updateStatus
 );
 
+// Update subscription package (upgrade/downgrade)
+router.put(
+  "/:subscriptionId/package",
+  authenticate,
+  SubscriptionController.updatePackage
+);
+
 // Handle payment
 router.post(
   "/:subscriptionId/payment",

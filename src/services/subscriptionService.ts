@@ -11,7 +11,7 @@ export class SubscriptionService {
       console.log("getCurrentSubscription called with userId:", userId);
       let subscription = await Subscription.findOne({ user: userId })
         .populate("package")
-        .sort({ createdAt: -1 });
+        .sort({ updatedAt: -1 }); // Sort by most recently updated
 
       console.log("Found existing subscription:", subscription);
       if (!subscription) {
@@ -79,25 +79,60 @@ export class SubscriptionService {
       const package_ = await Package.findById(packageId);
       if (!package_) throw new AppError(404, "Package not found");
 
+      console.log("createSubscription");
+      console.log("userId", userId);
+      console.log("packageId", packageId);
+      console.log("billingCycle", billingCycle);
       console.log("package_", package_);
-      // Create subscription record
-      const subscription = await Subscription.create({
+
+      // Check if user already has an active subscription
+      const existingSubscription = await Subscription.findOne({
         user: userId,
-        package: packageId,
-        status: "trial",
-        billingCycle,
-        currentPeriodStart: new Date(),
-        currentPeriodEnd: new Date(
+        status: { $in: ["active", "trial"] },
+      });
+
+      let subscription;
+      if (existingSubscription) {
+        // Update existing subscription
+        console.log(
+          "Updating existing subscription:",
+          existingSubscription._id
+        );
+        existingSubscription.package = packageId;
+        existingSubscription.billingCycle = billingCycle;
+        existingSubscription.currentPeriodStart = new Date();
+        existingSubscription.currentPeriodEnd = new Date(
           Date.now() +
             (billingCycle === "monthly" ? 30 : 365) * 24 * 60 * 60 * 1000
-        ),
-        stripeSubscriptionId: `local_${Date.now()}`, // Temporary local ID
-        stripeCustomerId: `local_${userId}`, // Temporary local ID
-        trialEndsAt:
+        );
+        existingSubscription.trialEndsAt =
           package_.trialDays > 0
             ? new Date(Date.now() + package_.trialDays * 24 * 60 * 60 * 1000)
-            : undefined,
-      });
+            : undefined;
+
+        await existingSubscription.save();
+        subscription = existingSubscription;
+      } else {
+        // Create new subscription record
+        console.log("Creating new subscription");
+        subscription = await Subscription.create({
+          user: userId,
+          package: packageId,
+          status: "trial",
+          billingCycle,
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: new Date(
+            Date.now() +
+              (billingCycle === "monthly" ? 30 : 365) * 24 * 60 * 60 * 1000
+          ),
+          stripeSubscriptionId: `local_${Date.now()}`, // Temporary local ID
+          stripeCustomerId: `local_${userId}`, // Temporary local ID
+          trialEndsAt:
+            package_.trialDays > 0
+              ? new Date(Date.now() + package_.trialDays * 24 * 60 * 60 * 1000)
+              : undefined,
+        });
+      }
 
       // Populate the package before using it
       const populatedSubscription = await Subscription.findById(
@@ -111,11 +146,19 @@ export class SubscriptionService {
       }
 
       // Update all existing usage records with new limits
-      const usageTypes = ["analysis", "api_call", "storage"] as const;
+      const usageTypes = [
+        "analysis",
+        "clarity_scan",
+        "chat_message",
+        "api_call",
+        "storage",
+      ] as const;
       const period = {
         start: subscription.currentPeriodStart,
         end: subscription.currentPeriodEnd,
       };
+
+      console.log("Updating usage records with period:", period);
 
       // Get user's company if any
       const userCompany = await Company.findOne({ owner: userId }).lean();
@@ -123,22 +166,47 @@ export class SubscriptionService {
 
       for (const type of usageTypes) {
         let total = 0;
-        if (type === "analysis") total = package_.features.maxAnalyses;
-        else if (type === "api_call")
-          total = 1000; // Default API call limit
-        else if (type === "storage") total = 1000; // Default storage limit
+        switch (type) {
+          case "analysis":
+            total = package_.features.maxAnalyses ?? 0;
+            break;
+          case "clarity_scan":
+            total = package_.features.maxClarityScans ?? 0;
+            break;
+          case "chat_message":
+            total = package_.features.maxChatMessages ?? 0;
+            break;
+          case "api_call":
+            total = 1000; // Default API call limit
+            break;
+          case "storage":
+            total = 1000; // Default storage limit
+            break;
+        }
 
-        // Get current usage counts
+        // Get current usage counts from active period
         const currentUserUsage = await Usage.findOne({
           user: userId,
           type,
+          "period.end": { $gt: new Date() },
         }).lean();
         const currentCompanyUsage = companyId
-          ? await Usage.findOne({ company: companyId, type }).lean()
+          ? await Usage.findOne({
+              company: companyId,
+              type,
+              "period.end": { $gt: new Date() },
+            }).lean()
           : null;
 
-        const userCount = currentUserUsage?.count || 0;
-        const companyCount = currentCompanyUsage?.count || 0;
+        const userCount = currentUserUsage?.limits?.used || 0;
+        const companyCount = currentCompanyUsage?.limits?.used || 0;
+
+        console.log(`Updating ${type} usage:`, {
+          userCount,
+          companyCount,
+          newTotal: total,
+          newRemaining: Math.max(0, total - userCount),
+        });
 
         // Update or create usage records for both user and company
         const updatePromises = [
@@ -150,7 +218,7 @@ export class SubscriptionService {
                 period,
                 "limits.total": total,
                 "limits.used": userCount,
-                "limits.remaining": total - userCount,
+                "limits.remaining": Math.max(0, total - userCount),
               },
             },
             { upsert: true, new: true }
@@ -167,7 +235,7 @@ export class SubscriptionService {
                   period,
                   "limits.total": total,
                   "limits.used": companyCount,
-                  "limits.remaining": total - companyCount,
+                  "limits.remaining": Math.max(0, total - companyCount),
                 },
               },
               { upsert: true, new: true }
@@ -175,7 +243,8 @@ export class SubscriptionService {
           );
         }
 
-        await Promise.all(updatePromises);
+        const updatedUsage = await Promise.all(updatePromises);
+        console.log(`Updated ${type} usage records:`, updatedUsage);
       }
 
       return {
@@ -215,33 +284,121 @@ export class SubscriptionService {
     }
   }
 
+  static async updateSubscriptionPackage(
+    subscriptionId: string,
+    newPackageId: string
+  ) {
+    try {
+      const subscription = await Subscription.findById(
+        subscriptionId
+      ).populate<{ package: IPackage }>("package");
+
+      if (!subscription) throw new AppError(404, "Subscription not found");
+
+      const newPackage = await Package.findById(newPackageId);
+      if (!newPackage) throw new AppError(404, "Package not found");
+
+      // Update the subscription with new package
+      subscription.package = newPackageId as any;
+      await subscription.save();
+
+      // Update usage records with new limits while preserving current usage
+      await this.upsertUsageForSubscription(subscription);
+
+      return subscription;
+    } catch (error) {
+      throw new AppError(500, "Failed to update subscription package");
+    }
+  }
+
   static async handleSuccessfulPayment(subscriptionId: string) {
     try {
       const subscription = await Subscription.findById(
         subscriptionId
-      ).populate<{ package: { features: { maxAnalyses: number } } }>("package");
+      ).populate<{ package: IPackage }>("package");
 
       if (!subscription) throw new AppError(404, "Subscription not found");
 
-      // Reset usage for new billing period
-      await Usage.updateOne(
-        { user: subscription.user },
-        {
-          $set: {
-            "limits.used": 0,
-            "limits.remaining": subscription.package.features.maxAnalyses,
-            "period.start": new Date(),
-            "period.end": new Date(
-              Date.now() +
-                (subscription.billingCycle === "monthly" ? 30 : 365) *
-                  24 *
-                  60 *
-                  60 *
-                  1000
+      // Only reset usage if this is a new billing period (not an upgrade/downgrade)
+      // Check if the current period has just started
+      const now = new Date();
+      const periodStart = new Date(subscription.currentPeriodStart);
+      const isNewBillingPeriod =
+        Math.abs(now.getTime() - periodStart.getTime()) < 24 * 60 * 60 * 1000; // Within 24 hours
+
+      if (isNewBillingPeriod) {
+        // Reset usage for new billing period
+        const usageTypes = [
+          "analysis",
+          "clarity_scan",
+          "chat_message",
+          "api_call",
+          "storage",
+        ] as const;
+        const period = {
+          start: subscription.currentPeriodStart,
+          end: subscription.currentPeriodEnd,
+        };
+
+        for (const type of usageTypes) {
+          let total = 0;
+          switch (type) {
+            case "analysis":
+              total = subscription.package.features.maxAnalyses ?? 0;
+              break;
+            case "clarity_scan":
+              total = subscription.package.features.maxClarityScans ?? 0;
+              break;
+            case "chat_message":
+              total = subscription.package.features.maxChatMessages ?? 0;
+              break;
+            case "api_call":
+            case "storage":
+              total = 1000; // Default limits
+              break;
+          }
+
+          // Update usage records for both user and company if applicable
+          const updatePromises = [
+            Usage.updateOne(
+              { user: subscription.user, type },
+              {
+                $set: {
+                  period,
+                  limits: {
+                    total,
+                    used: 0,
+                    remaining: total,
+                  },
+                  count: 0,
+                },
+              }
             ),
-          },
+          ];
+
+          // If subscription has a company, update company usage too
+          if (subscription.company) {
+            updatePromises.push(
+              Usage.updateOne(
+                { company: subscription.company, type },
+                {
+                  $set: {
+                    period,
+                    limits: {
+                      total,
+                      used: 0,
+                      remaining: total,
+                    },
+                    count: 0,
+                  },
+                }
+              )
+            );
+          }
+
+          await Promise.all(updatePromises);
         }
-      );
+      }
 
       return { success: true };
     } catch (error) {
@@ -291,9 +448,17 @@ export class SubscriptionService {
 
       console.log("Creating usage records...");
       // Initialize usage tracking for all types
-      const usageTypes = ["analysis", "api_call", "storage"] as const;
+      const usageTypes = [
+        "analysis",
+        "clarity_scan",
+        "chat_message",
+        "api_call",
+        "storage",
+      ] as const;
       const usageLimits = {
         analysis: { total: 2, used: 0, remaining: 2 },
+        clarity_scan: { total: 5, used: 0, remaining: 5 },
+        chat_message: { total: 0, used: 0, remaining: 0 },
         api_call: { total: 100, used: 0, remaining: 100 },
         storage: { total: 100, used: 0, remaining: 100 },
       };
@@ -332,39 +497,73 @@ export class SubscriptionService {
   }
 
   /**
-   * Creates or resets usage records based on a subscription's package.
+   * Creates or updates usage records based on a subscription's package.
    * This should be called whenever a subscription is created or changed.
+   * Preserves current usage when upgrading/downgrading.
    */
   private static async upsertUsageForSubscription(subscription: ISubscription) {
     const { user, company, package: subPackage } = subscription;
     const features = (subPackage as IPackage).features;
 
-    const usageTypes = ["analysis", "api_call", "storage"] as const;
+    const usageTypes = [
+      "analysis",
+      "clarity_scan",
+      "chat_message",
+      "api_call",
+      "storage",
+    ] as const;
     const period = {
       start: subscription.currentPeriodStart,
       end: subscription.currentPeriodEnd,
     };
 
-    // First, delete any existing usage records for this user/company
+    // Determine owner: user or company (never both)
     const usageIdentifier = company ? { company } : { user };
-    await Usage.deleteMany(usageIdentifier);
 
-    // Then create new usage records
     for (const type of usageTypes) {
       let total = 0;
-      if (type === "analysis") total = features.maxAnalyses ?? 0;
-      // Add more cases for other features if they exist in your package model
+      switch (type) {
+        case "analysis":
+          total = features.maxAnalyses ?? 0;
+          break;
+        case "clarity_scan":
+          total = features.maxClarityScans ?? 0;
+          break;
+        case "chat_message":
+          total = features.maxChatMessages ?? 0;
+          break;
+        case "api_call":
+        case "storage":
+          total = 1000; // Default limits
+          break;
+      }
 
-      await Usage.create({
+      // Get current usage from active period
+      const currentUsage = await Usage.findOne({
         ...usageIdentifier,
         type,
-        period,
-        limits: {
-          total,
-          used: 0,
-          remaining: total,
+        "period.end": { $gt: new Date() },
+      }).lean();
+
+      const currentUsed = currentUsage?.limits?.used || 0;
+      const currentCount = currentUsage?.count || 0;
+
+      // Update or create usage record, preserving current usage
+      await Usage.findOneAndUpdate(
+        { ...usageIdentifier, type },
+        {
+          $set: {
+            period,
+            limits: {
+              total,
+              used: currentUsed,
+              remaining: Math.max(0, total - currentUsed),
+            },
+            count: currentCount,
+          },
         },
-      });
+        { upsert: true, new: true }
+      );
     }
   }
 }

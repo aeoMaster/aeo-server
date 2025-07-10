@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { ClarityScannerService } from "../services/clarityScannerService";
+import { UsageService } from "../services/usageService";
 import { IClarityScan } from "../models/ClarityScan";
 import { z } from "zod";
 
@@ -43,8 +44,17 @@ export class ClarityScannerController {
     try {
       const { url } = scanUrlSchema.parse(req.query);
       const userId = (req.user as any)?._id;
+      const companyId = (req.user as any)?.company?._id?.toString();
 
       const scanResult = await ClarityScannerService.scanUrl(url, userId);
+
+      // Track usage for the clarity scan
+      try {
+        await UsageService.trackUsage(userId, companyId, "clarity_scan", 1);
+      } catch (usageError) {
+        console.error("Failed to track clarity scan usage:", usageError);
+        // Don't fail the scan creation if usage tracking fails
+      }
 
       // Return the scan result without HTML snapshot for API response
       const { htmlSnapshot, summaryByCategory, ...resultWithoutHtml } =
