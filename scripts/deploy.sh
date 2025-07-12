@@ -41,7 +41,7 @@ option_settings:
     PORT: 8080
   aws:elasticbeanstalk:container:nodejs:
     NodeCommand: "npm start"
-    NodeVersion: 18
+    NodeVersion: 20
 EOF
 
 # Create zip file

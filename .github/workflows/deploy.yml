@@ -7,7 +7,7 @@ on:
     branches: [main, master]
 
 env:
-  NODE_VERSION: "18"
+  NODE_VERSION: "20"
   AWS_REGION: us-east-1
 
 jobs:
@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "20"
           cache: "npm"
 
       - name: Install dependencies
@@ -45,7 +45,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "20"
           cache: "npm"
 
       - name: Install dependencies
@@ -76,7 +76,7 @@ jobs:
               PORT: 8080
             aws:elasticbeanstalk:container:nodejs:
               NodeCommand: "npm start"
-              NodeVersion: "18"
+              NodeVersion: "20"
           EOF
           # Create zip file
           cd deployment

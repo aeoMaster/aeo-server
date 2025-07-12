@@ -96,7 +96,7 @@ global:
   application_name: $EB_APP_NAME
   branch: null
   default_ec2_keyname: null
-  default_platform: Node.js 18
+  default_platform: Node.js 20
   default_region: us-east-1
   include_git_submodules: true
   instance_profile: null
@@ -118,7 +118,7 @@ fi
 print_info "Initializing Elastic Beanstalk application..."
 eb init "$EB_APP_NAME" \
     --region us-east-1 \
-    --platform "Node.js 18" \
+    --platform "Node.js 20" \
     --source codecommit/default
 
 # Create environment
@@ -228,7 +228,7 @@ option_settings:
     PORT: 8080
   aws:elasticbeanstalk:container:nodejs:
     NodeCommand: "npm start"
-    NodeVersion: 18
+    NodeVersion: 20
 EOF
 
 # Create zip file
