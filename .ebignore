@@ -1,0 +1,59 @@
+# Source files (not needed in production)
+src/
+tests/
+test/
+
+# Development files
+.git/
+.github/
+.gitignore
+README.md
+*.md
+
+# Development dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Temporary folders
+tmp/
+temp/
+
+# Build artifacts (we'll build fresh)
+dist/
+build/
+
+# TypeScript config for development
+tsconfig.json
+tsconfig.test.json
+
+# ESLint and Prettier configs
+.eslintrc*
+.prettierrc*
+
+# Jest config
+jest.config.js 

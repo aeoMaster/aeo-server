@@ -1,0 +1,110 @@
+name: Deploy to AWS Elastic Beanstalk
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  NODE_VERSION: "18"
+  AWS_REGION: us-east-1 # Change this to your AWS region
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+        env:
+          NODE_ENV: test
+          MONGODB_URI: ${{ secrets.MONGODB_URI_TEST }}
+
+      - name: Build application
+        run: npm run build
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Create deployment package
+        run: |
+          # Create a deployment directory
+          mkdir -p deployment
+          # Copy built files
+          cp -r dist/* deployment/
+          # Copy package.json and package-lock.json
+          cp package.json package-lock.json deployment/
+          # Copy Procfile if it exists
+          if [ -f Procfile ]; then
+            cp Procfile deployment/
+          fi
+          # Create .ebextensions directory and configuration
+          mkdir -p deployment/.ebextensions
+          # Create environment configuration
+          cat > deployment/.ebextensions/environment.config << EOF
+          option_settings:
+            aws:elasticbeanstalk:application:environment:
+              NODE_ENV: production
+              PORT: 8080
+            aws:elasticbeanstalk:container:nodejs:
+              NodeCommand: "npm start"
+              NodeVersion: ${{ env.NODE_VERSION }}
+          EOF
+          # Create zip file
+          cd deployment
+          zip -r ../deployment.zip .
+          cd ..
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy to Elastic Beanstalk
+        uses: einaregilsson/beanstalk-deploy@v21
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          application_name: ${{ secrets.EB_APPLICATION_NAME }}
+          environment_name: ${{ secrets.EB_ENVIRONMENT_NAME }}
+          version_label: ${{ github.sha }}
+          region: ${{ env.AWS_REGION }}
+          deployment_package: deployment.zip
+          wait_for_deployment: true
+          wait_for_environment_recovery: true
