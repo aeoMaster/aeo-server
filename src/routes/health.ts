@@ -4,7 +4,7 @@ import mongoose from "mongoose";
 const router = Router();
 
 // Basic health check endpoint
-router.get("/", (req, res) => {
+router.get("/", (_req, res) => {
   res.status(200).json({
     status: "healthy",
     timestamp: new Date().toISOString(),
@@ -14,7 +14,7 @@ router.get("/", (req, res) => {
 });
 
 // Detailed health check with database status
-router.get("/detailed", async (req, res) => {
+router.get("/detailed", async (_req, res) => {
   try {
     const dbStatus =
       mongoose.connection.readyState === 1 ? "connected" : "disconnected";
@@ -45,7 +45,7 @@ router.get("/detailed", async (req, res) => {
 });
 
 // AWS Elastic Beanstalk health check endpoint
-router.get("/aws", (req, res) => {
+router.get("/aws", (_req, res) => {
   // This endpoint is specifically for AWS Elastic Beanstalk health checks
   // It should be lightweight and respond quickly
   res.status(200).json({
