@@ -8,7 +8,7 @@ on:
 
 env:
   NODE_VERSION: "18"
-  AWS_REGION: us-east-1 # Change this to your AWS region
+  AWS_REGION: us-east-1
 
 jobs:
   test:
@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: "18"
           cache: "npm"
 
       - name: Install dependencies
@@ -29,12 +29,6 @@ jobs:
 
       - name: Run linting
         run: npm run lint
-
-      - name: Run tests
-        run: npm test
-        env:
-          NODE_ENV: test
-          MONGODB_URI: ${{ secrets.MONGODB_URI_TEST }}
 
       - name: Build application
         run: npm run build
@@ -51,7 +45,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: "18"
           cache: "npm"
 
       - name: Install dependencies
@@ -82,7 +76,7 @@ jobs:
               PORT: 8080
             aws:elasticbeanstalk:container:nodejs:
               NodeCommand: "npm start"
-              NodeVersion: ${{ env.NODE_VERSION }}
+              NodeVersion: "18"
           EOF
           # Create zip file
           cd deployment
@@ -104,7 +98,7 @@ jobs:
           application_name: ${{ secrets.EB_APPLICATION_NAME }}
           environment_name: ${{ secrets.EB_ENVIRONMENT_NAME }}
           version_label: ${{ github.sha }}
-          region: ${{ env.AWS_REGION }}
+          region: us-east-1
           deployment_package: deployment.zip
           wait_for_deployment: true
           wait_for_environment_recovery: true

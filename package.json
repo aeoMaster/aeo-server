@@ -11,7 +11,10 @@
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "test:health": "curl -s http://localhost:5000/health | jq .",
-    "deploy:local": "./scripts/deploy.sh"
+    "test:health-all": "./scripts/test-health.sh",
+    "deploy:local": "./scripts/deploy.sh",
+    "setup:aws": "./scripts/complete-setup.sh",
+    "validate:env": "node scripts/validate-env.js"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
