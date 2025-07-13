@@ -94,7 +94,7 @@ jobs:
           if [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
             echo "✅ AWS_SECRET_ACCESS_KEY is set (length: ${#AWS_SECRET_ACCESS_KEY})"
           else
-            echo "❌ AWS_SECRET_ACCESS_KEY is not set"
+            echo "❌ AWS_SECRET_ACCESS_KEY is not set ${#AWS_SECRET_ACCESS_KEY}"
           fi
           if [ -n "${{ secrets.EB_APPLICATION_NAME }}" ]; then
             echo "✅ EB_APPLICATION_NAME is set: ${{ secrets.EB_APPLICATION_NAME }}"
