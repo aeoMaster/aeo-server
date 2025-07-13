@@ -40,6 +40,9 @@ jobs:
           zip -r ../${{ github.sha }}-${{ github.run_number }}.zip .
           cd ..
 
+      - name: Check zip contents
+        run: unzip -l ${{ github.sha }}-${{ github.run_number }}.zip
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
