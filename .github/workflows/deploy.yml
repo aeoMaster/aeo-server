@@ -48,19 +48,24 @@ jobs:
 
       - name: Upload zip to S3
         run: |
-          aws s3 cp ${{ env.DEPLOY_PACKAGE_NAME }} s3://${{ env.S3_BUCKET_NAME }}/
+          export VERSION_LABEL="${{ github.sha }}-${{ github.run_number }}"
+          export S3_KEY="themedo-server/$VERSION_LABEL.zip"
+          echo "Uploading to S3 path: $S3_KEY"
+          aws s3 cp ${{ env.DEPLOY_PACKAGE_NAME }} s3://${{ env.S3_BUCKET_NAME }}/$S3_KEY
+          echo "S3_KEY=$S3_KEY" >> $GITHUB_ENV
+          echo "VERSION_LABEL=$VERSION_LABEL" >> $GITHUB_ENV
 
       - name: Create new Elastic Beanstalk app version
         run: |
           aws elasticbeanstalk create-application-version \
             --application-name "${{ secrets.EB_APPLICATION_NAME }}" \
-            --version-label "${{ github.sha }}" \
-            --source-bundle S3Bucket="${{ env.S3_BUCKET_NAME }}",S3Key="${{ env.DEPLOY_PACKAGE_NAME }}" \
+            --version-label "$VERSION_LABEL" \
+            --source-bundle S3Bucket="${{ env.S3_BUCKET_NAME }}",S3Key="$S3_KEY" \
             --region "${{ env.AWS_REGION }}"
 
       - name: Deploy app version to Elastic Beanstalk
         run: |
           aws elasticbeanstalk update-environment \
             --environment-name "${{ secrets.EB_ENVIRONMENT_NAME }}" \
-            --version-label "${{ github.sha }}" \
+            --version-label "$VERSION_LABEL" \
             --region "${{ env.AWS_REGION }}"
