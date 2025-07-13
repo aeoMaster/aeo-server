@@ -63,6 +63,29 @@ jobs:
             --source-bundle S3Bucket="${{ env.S3_BUCKET_NAME }}",S3Key="$S3_KEY" \
             --region "${{ env.AWS_REGION }}"
 
+      - name: Wait for application version to be processed
+        run: |
+          VERSION_LABEL="$VERSION_LABEL"
+          echo "Waiting for application version $VERSION_LABEL to be PROCESSED..."
+          for i in {1..10}; do
+            STATUS=$(aws elasticbeanstalk describe-application-versions \
+              --application-name "${{ secrets.EB_APPLICATION_NAME }}" \
+              --version-labels "$VERSION_LABEL" \
+              --query 'ApplicationVersions[0].Status' \
+              --output text \
+              --region "${{ env.AWS_REGION }}")
+
+            echo "Status: $STATUS"
+
+            if [ "$STATUS" = "PROCESSED" ]; then
+              echo "Application version is ready."
+              break
+            fi
+
+            echo "Still waiting... ($i/10)"
+            sleep 10
+          done
+
       - name: Deploy app version to Elastic Beanstalk
         run: |
           aws elasticbeanstalk update-environment \
