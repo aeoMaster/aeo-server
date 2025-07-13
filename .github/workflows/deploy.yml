@@ -7,8 +7,8 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  NODE_VERSION: "20"
-  VERSION_LABEL: ${{ github.sha }}-${{ github.run_number }}
+  S3_BUCKET_NAME: elasticbeanstalk-us-east-1-274949446217
+  DEPLOY_PACKAGE_NAME: deployment.zip
 
 jobs:
   deploy:
@@ -21,35 +21,22 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: "20"
           cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build application
+      - name: Build app
         run: npm run build
 
-      - name: Package app
+      - name: Zip build folder
         run: |
           mkdir -p deployment
           cp -r dist/* deployment/
-          cp package*.json deployment/
-          if [ -f Procfile ]; then cp Procfile deployment/; fi
-
-          mkdir -p deployment/.ebextensions
-          cat > deployment/.ebextensions/environment.config << EOF
-          option_settings:
-            aws:elasticbeanstalk:application:environment:
-              NODE_ENV: production
-              PORT: 8080
-            aws:elasticbeanstalk:container:nodejs:
-              NodeCommand: "npm start"
-              NodeVersion: "20"
-          EOF
-
+          cp package.json package-lock.json deployment/
           cd deployment
-          zip -r ../deployment.zip .
+          zip -r ../${{ env.DEPLOY_PACKAGE_NAME }} .
           cd ..
 
       - name: Configure AWS credentials
@@ -59,15 +46,21 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Upload new version to Elastic Beanstalk
-        uses: einaregilsson/beanstalk-deploy@v21
-        with:
-          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          application_name: ${{ secrets.EB_APPLICATION_NAME }}
-          environment_name: ${{ secrets.EB_ENVIRONMENT_NAME }}
-          region: ${{ env.AWS_REGION }}
-          deployment_package: deployment.zip
-          version_label: ${{ env.VERSION_LABEL }}
-          wait_for_deployment: true
-          wait_for_environment_recovery: true
+      - name: Upload zip to S3
+        run: |
+          aws s3 cp ${{ env.DEPLOY_PACKAGE_NAME }} s3://${{ env.S3_BUCKET_NAME }}/
+
+      - name: Create new Elastic Beanstalk app version
+        run: |
+          aws elasticbeanstalk create-application-version \
+            --application-name "${{ secrets.EB_APPLICATION_NAME }}" \
+            --version-label "${{ github.sha }}" \
+            --source-bundle S3Bucket="${{ env.S3_BUCKET_NAME }}",S3Key="${{ env.DEPLOY_PACKAGE_NAME }}" \
+            --region "${{ env.AWS_REGION }}"
+
+      - name: Deploy app version to Elastic Beanstalk
+        run: |
+          aws elasticbeanstalk update-environment \
+            --environment-name "${{ secrets.EB_ENVIRONMENT_NAME }}" \
+            --version-label "${{ github.sha }}" \
+            --region "${{ env.AWS_REGION }}"
