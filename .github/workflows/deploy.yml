@@ -114,6 +114,19 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
+      - name: Upload to Beanstalk & Create Version
+        uses: einaregilsson/beanstalk-deploy@v21
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          application_name: ${{ secrets.EB_APPLICATION_NAME }}
+          region: us-east-1
+          deployment_package: deployment.zip
+          version_label: ${{ github.sha }}-${{ github.run_number }}
+
+      - name: Wait for version to register
+        run: sleep 20
+
       - name: Deploy to Elastic Beanstalk
         uses: einaregilsson/beanstalk-deploy@v21
         with:
@@ -121,9 +134,8 @@ jobs:
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           application_name: ${{ secrets.EB_APPLICATION_NAME }}
           environment_name: ${{ secrets.EB_ENVIRONMENT_NAME }}
-          version_label: ${{ github.sha }}-${{ github.run_number }}
           region: us-east-1
-          deployment_package: deployment.zip
+          version_label: ${{ github.sha }}-${{ github.run_number }}
           wait_for_deployment: true
           wait_for_environment_recovery: true
           use_existing_version_if_available: true
