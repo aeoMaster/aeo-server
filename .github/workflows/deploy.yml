@@ -3,40 +3,16 @@ name: Deploy to AWS Elastic Beanstalk
 on:
   push:
     branches: [main]
-
   workflow_dispatch:
 
 env:
-  NODE_VERSION: "20"
   AWS_REGION: us-east-1
+  NODE_VERSION: "20"
+  VERSION_LABEL: ${{ github.sha }}-${{ github.run_number }}
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm install
-
-      #   - name: Run linting
-      #     run: npm run lint
-
-      - name: Build application
-        run: npm run build
-
   deploy:
-    needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
 
     steps:
       - name: Checkout code
@@ -45,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
 
       - name: Install dependencies
@@ -54,21 +30,14 @@ jobs:
       - name: Build application
         run: npm run build
 
-      - name: Create deployment package
+      - name: Package app
         run: |
-          # Create a deployment directory
           mkdir -p deployment
-          # Copy built files
           cp -r dist/* deployment/
-          # Copy package.json and package-lock.json
-          cp package.json package-lock.json deployment/
-          # Copy Procfile if it exists
-          if [ -f Procfile ]; then
-            cp Procfile deployment/
-          fi
-          # Create .ebextensions directory and configuration
+          cp package*.json deployment/
+          if [ -f Procfile ]; then cp Procfile deployment/; fi
+
           mkdir -p deployment/.ebextensions
-          # Create environment configuration
           cat > deployment/.ebextensions/environment.config << EOF
           option_settings:
             aws:elasticbeanstalk:application:environment:
@@ -78,65 +47,27 @@ jobs:
               NodeCommand: "npm start"
               NodeVersion: "20"
           EOF
-          # Create zip file
-          cd deployment
-          zip -r ../deployment.zip ./*
-          cd ..
 
-      - name: Check secrets availability
-        run: |
-          echo "Checking if AWS secrets are available..."
-          if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
-            echo "✅ AWS_ACCESS_KEY_ID is set (length: ${#AWS_ACCESS_KEY_ID})"
-          else
-            echo "❌ AWS_ACCESS_KEY_ID is not set"
-          fi
-          if [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
-            echo "✅ AWS_SECRET_ACCESS_KEY is set (length: ${#AWS_SECRET_ACCESS_KEY})"
-          else
-            echo "❌ AWS_SECRET_ACCESS_KEY is not set ${#AWS_SECRET_ACCESS_KEY}"
-          fi
-          if [ -n "${{ secrets.EB_APPLICATION_NAME }}" ]; then
-            echo "✅ EB_APPLICATION_NAME is set: ${{ secrets.EB_APPLICATION_NAME }}"
-          else
-            echo "❌ EB_APPLICATION_NAME is not set"
-          fi
-          if [ -n "${{ secrets.EB_ENVIRONMENT_NAME }}" ]; then
-            echo "✅ EB_ENVIRONMENT_NAME is set: ${{ secrets.EB_ENVIRONMENT_NAME }}"
-          else
-            echo "❌ EB_ENVIRONMENT_NAME is not set (length: ${#EB_ENVIRONMENT_NAME})"
-          fi
+          cd deployment
+          zip -r ../deployment.zip .
+          cd ..
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Upload to Beanstalk & Create Version
-        uses: einaregilsson/beanstalk-deploy@v21
-        with:
-          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          application_name: ${{ secrets.EB_APPLICATION_NAME }}
-          region: us-east-1
-          deployment_package: deployment.zip
-          version_label: ${{ github.sha }}-${{ github.run_number }}
-          wait_for_deployment: false
-
-      - name: Wait for version to register
-        run: sleep 20
-
-      - name: Deploy to Elastic Beanstalk
+      - name: Upload new version to Elastic Beanstalk
         uses: einaregilsson/beanstalk-deploy@v21
         with:
           aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           application_name: ${{ secrets.EB_APPLICATION_NAME }}
           environment_name: ${{ secrets.EB_ENVIRONMENT_NAME }}
-          region: us-east-1
-          version_label: ${{ github.sha }}-${{ github.run_number }}
+          region: ${{ env.AWS_REGION }}
+          deployment_package: deployment.zip
+          version_label: ${{ env.VERSION_LABEL }}
           wait_for_deployment: true
           wait_for_environment_recovery: true
-          use_existing_version_if_available: true
