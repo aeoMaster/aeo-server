@@ -8,7 +8,8 @@ on:
 env:
   AWS_REGION: us-east-1
   S3_BUCKET_NAME: elasticbeanstalk-us-east-1-274949446217
-  DEPLOY_PACKAGE_NAME: deployment.zip
+  APP_NAME: themedo-server
+  DEPLOY_FOLDER: themedo-server
 
 jobs:
   deploy:
@@ -36,7 +37,7 @@ jobs:
           cp -r dist/* deployment/
           cp package.json package-lock.json deployment/
           cd deployment
-          zip -r ../${{ env.DEPLOY_PACKAGE_NAME }} .
+          zip -r ../${{ github.sha }}-${{ github.run_number }}.zip .
           cd ..
 
       - name: Configure AWS credentials
@@ -48,29 +49,22 @@ jobs:
 
       - name: Upload zip to S3
         run: |
-          export VERSION_LABEL="${{ github.sha }}-${{ github.run_number }}"
-          export S3_KEY="themedo-server/$VERSION_LABEL.zip"
-          echo "Uploading to S3 path: $S3_KEY"
-          aws s3 cp ${{ env.DEPLOY_PACKAGE_NAME }} s3://${{ env.S3_BUCKET_NAME }}/$S3_KEY
-          echo "S3_KEY=$S3_KEY" >> $GITHUB_ENV
-          echo "VERSION_LABEL=$VERSION_LABEL" >> $GITHUB_ENV
+          aws s3 cp "${{ github.sha }}-${{ github.run_number }}.zip" "s3://${{ env.S3_BUCKET_NAME }}/${{ env.DEPLOY_FOLDER }}/${{ github.sha }}-${{ github.run_number }}.zip"
 
       - name: Create new Elastic Beanstalk app version
         run: |
           aws elasticbeanstalk create-application-version \
-            --application-name "${{ secrets.EB_APPLICATION_NAME }}" \
-            --version-label "$VERSION_LABEL" \
-            --source-bundle S3Bucket="${{ env.S3_BUCKET_NAME }}",S3Key="$S3_KEY" \
+            --application-name "${{ env.APP_NAME }}" \
+            --version-label "${{ github.sha }}-${{ github.run_number }}" \
+            --source-bundle S3Bucket="${{ env.S3_BUCKET_NAME }}",S3Key="${{ env.DEPLOY_FOLDER }}/${{ github.sha }}-${{ github.run_number }}.zip" \
             --region "${{ env.AWS_REGION }}"
 
-      - name: Wait for application version to be processed
+      - name: Wait for version to be PROCESSED
         run: |
-          VERSION_LABEL="$VERSION_LABEL"
-          echo "Waiting for application version $VERSION_LABEL to be PROCESSED..."
-          for i in {1..10}; do
+          for i in {1..15}; do
             STATUS=$(aws elasticbeanstalk describe-application-versions \
-              --application-name "${{ secrets.EB_APPLICATION_NAME }}" \
-              --version-labels "$VERSION_LABEL" \
+              --application-name "${{ env.APP_NAME }}" \
+              --version-labels "${{ github.sha }}-${{ github.run_number }}" \
               --query 'ApplicationVersions[0].Status' \
               --output text \
               --region "${{ env.AWS_REGION }}")
@@ -78,17 +72,17 @@ jobs:
             echo "Status: $STATUS"
 
             if [ "$STATUS" = "PROCESSED" ]; then
-              echo "Application version is ready."
+              echo "✅ Version is processed"
               break
             fi
 
-            echo "Still waiting... ($i/10)"
+            echo "Waiting... ($i/15)"
             sleep 10
           done
 
-      - name: Deploy app version to Elastic Beanstalk
+      - name: Deploy to Elastic Beanstalk
         run: |
           aws elasticbeanstalk update-environment \
             --environment-name "${{ secrets.EB_ENVIRONMENT_NAME }}" \
-            --version-label "$VERSION_LABEL" \
+            --version-label "${{ github.sha }}-${{ github.run_number }}" \
             --region "${{ env.AWS_REGION }}"
