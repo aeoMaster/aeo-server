@@ -123,6 +123,7 @@ jobs:
           region: us-east-1
           deployment_package: deployment.zip
           version_label: ${{ github.sha }}-${{ github.run_number }}
+          wait_for_deployment: false
 
       - name: Wait for version to register
         run: sleep 20
