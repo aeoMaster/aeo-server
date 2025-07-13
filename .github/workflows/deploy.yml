@@ -104,7 +104,7 @@ jobs:
           if [ -n "${{ secrets.EB_ENVIRONMENT_NAME }}" ]; then
             echo "✅ EB_ENVIRONMENT_NAME is set: ${{ secrets.EB_ENVIRONMENT_NAME }}"
           else
-            echo "❌ EB_ENVIRONMENT_NAME is not set"
+            echo "❌ EB_ENVIRONMENT_NAME is not set (length: ${#EB_ENVIRONMENT_NAME})"
           fi
 
       - name: Configure AWS credentials
