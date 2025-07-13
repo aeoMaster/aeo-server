@@ -80,7 +80,7 @@ jobs:
           EOF
           # Create zip file
           cd deployment
-          zip -r ../deployment.zip .
+          zip -r ../deployment.zip ./*
           cd ..
 
       - name: Check secrets availability
