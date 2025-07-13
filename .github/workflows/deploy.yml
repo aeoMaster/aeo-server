@@ -2,9 +2,9 @@ name: Deploy to AWS Elastic Beanstalk
 
 on:
   push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
+    branches: [main]
+
+  workflow_dispatch:
 
 env:
   NODE_VERSION: "20"
