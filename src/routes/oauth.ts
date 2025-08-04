@@ -12,6 +12,10 @@ router.get(
 );
 router.get("/linkedin/callback", OAuthController.handleLinkedInCallback);
 
+// Google OAuth routes
+router.get("/google/auth-url", authenticate, OAuthController.getGoogleAuthUrl);
+router.get("/google/callback", OAuthController.handleGoogleCallback);
+
 // Medium OAuth routes - REMOVED (Medium API is deprecated)
 
 // Platform management routes

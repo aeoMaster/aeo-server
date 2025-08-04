@@ -181,6 +181,159 @@ export class OAuthController {
     }
   }
 
+  static async getGoogleAuthUrl(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      const redirectUri =
+        "https://server-api.themoda.io/api/oauth/google/callback";
+      const scope =
+        "https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email";
+      const { blogId } = req.query;
+
+      if (!clientId || !redirectUri) {
+        throw new AppError(500, "Google configuration missing");
+      }
+
+      // Create state with both userId and blogId
+      const state = JSON.stringify({
+        userId: req.user?._id,
+        blogId: blogId || null,
+      });
+
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}`;
+
+      res.json({ authUrl });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async handleGoogleCallback(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const { code, state, error, error_description } = req.query;
+
+      // Handle OAuth errors
+      if (error) {
+        console.error("Google OAuth error:", error, error_description);
+        return res.status(400).json({
+          status: "error",
+          message: `Google authorization failed: ${error_description || error}`,
+          error: error,
+          error_description: error_description,
+        });
+      }
+
+      if (!code || !state) {
+        throw new AppError(400, "Invalid callback parameters");
+      }
+
+      // Parse state to get userId and blogId
+      let stateData;
+      try {
+        stateData = JSON.parse(decodeURIComponent(state as string));
+      } catch (error) {
+        throw new AppError(400, "Invalid state parameter");
+      }
+
+      const { userId, blogId } = stateData;
+      if (!userId) {
+        throw new AppError(400, "Invalid state: missing userId");
+      }
+
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+      const redirectUri =
+        "https://server-api.themoda.io/api/oauth/google/callback";
+
+      if (!clientId || !clientSecret || !redirectUri) {
+        throw new AppError(500, "Google configuration missing");
+      }
+
+      // Exchange code for access token
+      const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code: code as string,
+          client_id: clientId,
+          client_secret: clientSecret,
+          redirect_uri: redirectUri,
+        }),
+      });
+
+      if (!tokenResponse.ok) {
+        const errorData = await tokenResponse.text();
+        console.error("Google token exchange error:", errorData);
+        throw new AppError(400, "Failed to get Google access token");
+      }
+
+      const tokenData = await tokenResponse.json();
+
+      // Get user profile from Google
+      const profileResponse = await fetch(
+        "https://www.googleapis.com/oauth2/v2/userinfo",
+        {
+          headers: {
+            Authorization: `Bearer ${tokenData.access_token}`,
+          },
+        }
+      );
+
+      if (!profileResponse.ok) {
+        throw new AppError(400, "Failed to get Google profile");
+      }
+
+      const profile = await profileResponse.json();
+
+      // Save or update token
+      await PlatformToken.findOneAndUpdate(
+        { user: userId, platform: "google" },
+        {
+          user: userId,
+          platform: "google",
+          accessToken: tokenData.access_token,
+          refreshToken: tokenData.refresh_token,
+          expiresAt: tokenData.expires_in
+            ? new Date(Date.now() + tokenData.expires_in * 1000)
+            : undefined,
+          platformUserId: profile.id,
+          platformUsername: profile.name || profile.email,
+          isActive: true,
+          needsReauth: false,
+          lastUsed: new Date(),
+        },
+        { upsert: true, new: true }
+      );
+
+      console.log("Google profile", profile);
+      console.log("blogId", blogId);
+
+      // Redirect to frontend with blogId if provided
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+
+      if (blogId) {
+        return res.redirect(
+          `${frontendUrl}/dashboard/blogs/${blogId}?platform=google`
+        );
+      } else {
+        return res.redirect(`${frontendUrl}/dashboard/blogs?platform=google`);
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Medium OAuth methods removed - Medium API is deprecated
 
   // Medium OAuth callback removed - Medium API is deprecated
@@ -206,6 +359,16 @@ export class OAuthController {
           name: "LinkedIn",
           description: "Share your content on LinkedIn",
           icon: "linkedin",
+          isConnected: false,
+          needsReauth: false,
+          platformUsername: null,
+          lastUsed: null,
+        },
+        {
+          platform: "google",
+          name: "Google",
+          description: "Connect your Google account",
+          icon: "google",
           isConnected: false,
           needsReauth: false,
           platformUsername: null,
@@ -288,6 +451,23 @@ export class OAuthController {
         });
 
         authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}`;
+      } else if (platform === "google") {
+        const clientId = process.env.GOOGLE_CLIENT_ID;
+        const redirectUri =
+          "https://server-api.themoda.io/api/oauth/google/callback";
+        const scope =
+          "https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email";
+
+        if (!clientId || !redirectUri) {
+          throw new AppError(500, "Google configuration missing");
+        }
+
+        const state = JSON.stringify({
+          userId: userId,
+          blogId: blogId || null,
+        });
+
+        authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}`;
       } else {
         throw new AppError(400, "Unsupported platform");
       }
