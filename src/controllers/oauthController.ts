@@ -188,8 +188,7 @@ export class OAuthController {
   ) {
     try {
       const clientId = process.env.GOOGLE_CLIENT_ID;
-      const redirectUri =
-        "https://server-api.themoda.io/api/oauth/google/callback";
+      const redirectUri = process.env.GOOGLE_REDIRECT_URI;
       const scope =
         "https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email";
       const { blogId } = req.query;
@@ -250,8 +249,7 @@ export class OAuthController {
 
       const clientId = process.env.GOOGLE_CLIENT_ID;
       const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-      const redirectUri =
-        "https://server-api.themoda.io/api/oauth/google/callback";
+      const redirectUri = process.env.GOOGLE_REDIRECT_URI;
 
       if (!clientId || !clientSecret || !redirectUri) {
         throw new AppError(500, "Google configuration missing");
@@ -453,8 +451,7 @@ export class OAuthController {
         authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}`;
       } else if (platform === "google") {
         const clientId = process.env.GOOGLE_CLIENT_ID;
-        const redirectUri =
-          "https://server-api.themoda.io/api/oauth/google/callback";
+        const redirectUri = process.env.GOOGLE_REDIRECT_URI;
         const scope =
           "https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email";
 
