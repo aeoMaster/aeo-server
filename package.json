@@ -18,7 +18,8 @@
     "test:health-all": "./scripts/test-health.sh",
     "deploy:local": "./scripts/deploy.sh",
     "setup:aws": "./scripts/complete-setup.sh",
-    "validate:env": "node scripts/validate-env.js"
+    "validate:env": "node scripts/validate-env.js",
+    "migrate:analysis": "node scripts/migrate-analysis.js"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",

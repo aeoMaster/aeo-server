@@ -7,7 +7,8 @@ export class UsageController {
   static async getUsage(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = (req.user as any)?._id;
-      const companyId = (req.user as any)?.company;
+      const companyId =
+        (req.user as any)?.company?._id || (req.user as any)?.company;
       if (!userId) {
         throw new AppError(401, "User not authenticated");
       }
@@ -25,7 +26,8 @@ export class UsageController {
   static async trackUsage(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = (req.user as any)?._id;
-      const companyId = (req.user as any)?.company;
+      const companyId =
+        (req.user as any)?.company?._id || (req.user as any)?.company;
       if (!userId) {
         throw new AppError(401, "User not authenticated");
       }
@@ -50,7 +52,8 @@ export class UsageController {
   ) {
     try {
       const userId = (req.user as any)?._id;
-      const companyId = (req.user as any)?.company;
+      const companyId =
+        (req.user as any)?.company?._id || (req.user as any)?.company;
       if (!userId) {
         throw new AppError(401, "User not authenticated");
       }
@@ -79,7 +82,8 @@ export class UsageController {
   ) {
     try {
       const userId = (req.user as any)?._id;
-      const companyId = (req.user as any)?.company;
+      const companyId =
+        (req.user as any)?.company?._id || (req.user as any)?.company;
       if (!userId) {
         throw new AppError(401, "User not authenticated");
       }

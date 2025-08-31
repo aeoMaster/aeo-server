@@ -1,4 +1,6 @@
 export const RUBRIC_KEYS = [
+  "business_analysis",
+  "scoring_guidelines",
   "structured_data",
   "speakable_ready",
   "snippet_conciseness",

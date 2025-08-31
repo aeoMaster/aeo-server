@@ -5,9 +5,30 @@ export interface IAnalysis extends Document {
   type: "content" | "url";
   content?: string;
   url?: string;
-  company?: string;
+  company?: mongoose.Types.ObjectId;
+  companyName?: string;
   section?: string;
   score: number;
+  category_scores?: {
+    structured_data: number;
+    speakable_ready: number;
+    snippet_conciseness: number;
+    crawler_access: number;
+    freshness_meta: number;
+    e_e_a_t_signals: number;
+    media_alt_caption: number;
+    hreflang_lang_meta: number;
+    answer_upfront: number;
+  };
+  fixes?: Array<{
+    problem: string;
+    example: string;
+    fix: string;
+    impact: "high" | "med" | "low";
+    category: string;
+    effort: "low" | "medium" | "high";
+    validation: string[];
+  }>;
   metrics: {
     readability: number;
     engagement: number;
@@ -64,12 +85,44 @@ const analysisSchema = new Schema<IAnalysis>({
   },
   content: String,
   url: String,
-  company: String,
+  company: {
+    type: Schema.Types.ObjectId,
+    ref: "Company",
+  },
+  companyName: String,
   section: String,
   score: {
     type: Number,
     // required: true,
   },
+  category_scores: {
+    structured_data: Number,
+    speakable_ready: Number,
+    snippet_conciseness: Number,
+    crawler_access: Number,
+    freshness_meta: Number,
+    e_e_a_t_signals: Number,
+    media_alt_caption: Number,
+    hreflang_lang_meta: Number,
+    answer_upfront: Number,
+  },
+  fixes: [
+    {
+      problem: String,
+      example: String,
+      fix: String,
+      impact: {
+        type: String,
+        enum: ["high", "med", "low"],
+      },
+      category: String,
+      effort: {
+        type: String,
+        enum: ["low", "medium", "high"],
+      },
+      validation: [String],
+    },
+  ],
   metrics: {
     readability: Number,
     engagement: Number,
@@ -121,5 +174,10 @@ const analysisSchema = new Schema<IAnalysis>({
     default: Date.now,
   },
 });
+
+// Add indexes for better query performance
+analysisSchema.index({ user: 1, createdAt: -1 });
+analysisSchema.index({ company: 1, createdAt: -1 });
+analysisSchema.index({ url: 1, createdAt: -1 });
 
 export const Analysis = mongoose.model<IAnalysis>("Analysis", analysisSchema);

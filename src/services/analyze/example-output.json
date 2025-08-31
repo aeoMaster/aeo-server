@@ -1,0 +1,164 @@
+{
+  "meta": {
+    "_id": "507f1f77bcf86cd799439011",
+    "user": "507f1f77bcf86cd799439012",
+    "type": "url",
+    "url": "https://example.com",
+    "company": "507f1f77bcf86cd799439013",
+    "companyName": "Example Corp",
+    "section": "homepage",
+    "createdAt": "2024-01-15T10:30:00.000Z"
+  },
+  "scores": {
+    "score": 65,
+    "category_scores": {
+      "structured_data": 45,
+      "answer_upfront": 30,
+      "freshness_meta": 70,
+      "e_e_a_t_signals": 60,
+      "speakable_ready": 55,
+      "snippet_conciseness": 80,
+      "crawler_access": 40,
+      "media_alt_caption": 75,
+      "hreflang_lang_meta": 65
+    },
+    "metrics": {
+      "readability": 70,
+      "engagement": 60,
+      "seo": 45,
+      "conversion": 55,
+      "brandVoice": 65,
+      "contentDepth": 70,
+      "originality": 75,
+      "technicalAccuracy": 40
+    }
+  },
+  "keywords": {
+    "primary": ["example", "test"],
+    "secondary": ["sample", "demo"],
+    "longTail": ["example test sample"]
+  },
+  "audience": {
+    "demographics": ["25-45", "professionals"],
+    "interests": ["technology", "business"],
+    "painPoints": ["complex processes", "lack of clarity"]
+  },
+  "prioritized": {
+    "highlights": ["structured_data", "answer_upfront", "freshness_meta"],
+    "quickWins": [
+      "Add TL;DR (answer upfront) in first viewport",
+      "Add freshness indicators"
+    ],
+    "fixes": [
+      {
+        "id": "structured_data_fix",
+        "category": "structured_data",
+        "title": "Add structured data markup",
+        "impact": "high",
+        "effort": "medium",
+        "confidence": 0.89,
+        "priority": 0.87,
+        "why": "Low structured data score (45). This affects high priority areas.",
+        "how": {
+          "jsonld_placeholder": "{ \"@context\": \"https://schema.org\", \"@type\": \"[CONTENT_TYPE_PLACEHOLDER]\" }",
+          "head_placeholder": ["<script type=\"application/ld+json\">[STRUCTURED_DATA_JSON]</script>"]
+        },
+        "validation": ["json_ld_valid=true", "schema_type_appropriate=true"]
+      },
+      {
+        "id": "answer_upfront_fix",
+        "category": "answer_upfront",
+        "title": "Add TL;DR (answer upfront) in first viewport",
+        "impact": "high",
+        "effort": "low",
+        "confidence": 0.85,
+        "priority": 0.89,
+        "why": "Low answer upfront content score (30). This affects high priority areas.",
+        "how": {
+          "html_placeholder": "<p class='tldr'>[PLACEHOLDER_TLDR]</p>",
+          "dom_placeholder": "<div class='summary'>[PLACEHOLDER_SUMMARY]</div>"
+        },
+        "validation": ["tldr_words>=30", "tldr_visible=true"]
+      },
+      {
+        "id": "crawler_access_fix",
+        "category": "crawler_access",
+        "title": "Improve crawler accessibility",
+        "impact": "med",
+        "effort": "high",
+        "confidence": 0.82,
+        "priority": 0.65,
+        "why": "Low crawler accessibility score (40). This affects medium priority areas.",
+        "how": {
+          "head_placeholder": [
+            "<meta name=\"robots\" content=\"[ROBOTS_DIRECTIVES]\" />",
+            "<link rel=\"canonical\" href=\"[CANONICAL_URL]\" />"
+          ]
+        },
+        "validation": ["robots_txt_accessible=true", "canonical_url_exists=true"]
+      },
+      {
+        "id": "e_e_a_t_signals_fix",
+        "category": "e_e_a_t_signals",
+        "title": "Enhance E-E-A-T signals",
+        "impact": "med",
+        "effort": "medium",
+        "confidence": 0.78,
+        "priority": 0.62,
+        "why": "Low E-E-A-T signals score (60). This affects medium priority areas.",
+        "how": {
+          "html_placeholder": "<p class=\"byline\">By [AUTHOR_NAME_PLACEHOLDER]</p>",
+          "jsonld_placeholder": "{ \"@type\": \"Person\", \"name\": \"[AUTHOR_NAME_PLACEHOLDER]\" }"
+        },
+        "validation": ["author_name_exists=true", "author_credentials_exists=true"]
+      },
+      {
+        "id": "speakable_ready_fix",
+        "category": "speakable_ready",
+        "title": "Enable speakable content",
+        "impact": "med",
+        "effort": "medium",
+        "confidence": 0.76,
+        "priority": 0.60,
+        "why": "Low speakable content score (55). This affects medium priority areas.",
+        "how": {
+          "jsonld_placeholder": "{ \"@type\": \"SpeakableSpecification\", \"cssSelector\": [\"h1\", \".tldr\"] }",
+          "head_placeholder": ["<meta property=\"speakable\" content=\"[SPEAKABLE_SELECTORS]\" />"]
+        },
+        "validation": ["speakable_markup_exists=true", "css_selectors_valid=true"]
+      }
+    ]
+  },
+  "codePlaceholders": {
+    "jsonld": [
+      "{ \"@context\": \"https://schema.org\", \"@type\": \"Article\", \"headline\": \"[HEADLINE_PLACEHOLDER]\", \"author\": { \"@type\": \"Person\", \"name\": \"[AUTHOR_NAME_PLACEHOLDER]\" } }",
+      "{ \"@context\": \"https://schema.org\", \"@type\": \"WebPage\", \"name\": \"[PAGE_TITLE_PLACEHOLDER]\", \"description\": \"[DESCRIPTION_PLACEHOLDER]\" }",
+      "{ \"@context\": \"https://schema.org\", \"@type\": \"Organization\", \"name\": \"[COMPANY_NAME_PLACEHOLDER]\", \"url\": \"[WEBSITE_URL_PLACEHOLDER]\" }"
+    ],
+    "head": [
+      "<meta name=\"description\" content=\"[DESCRIPTION_PLACEHOLDER]\" />",
+      "<meta property=\"og:title\" content=\"[OG_TITLE_PLACEHOLDER]\" />",
+      "<meta property=\"og:description\" content=\"[OG_DESCRIPTION_PLACEHOLDER]\" />",
+      "<link rel=\"canonical\" href=\"[CANONICAL_URL_PLACEHOLDER]\" />",
+      "<meta name=\"robots\" content=\"[ROBOTS_DIRECTIVES_PLACEHOLDER]\" />"
+    ],
+    "dom": [
+      "<h1>[MAIN_HEADING_PLACEHOLDER]</h1>",
+      "<p class=\"lead\">[LEAD_PARAGRAPH_PLACEHOLDER]</p>",
+      "<img src=\"[IMAGE_SRC_PLACEHOLDER]\" alt=\"[ALT_TEXT_PLACEHOLDER]\" />",
+      "<a href=\"[LINK_URL_PLACEHOLDER]\" title=\"[LINK_TITLE_PLACEHOLDER]\">[LINK_TEXT_PLACEHOLDER]</a>",
+      "<div class=\"summary\">[SUMMARY_CONTENT_PLACEHOLDER]</div>"
+    ]
+  },
+  "raw": {
+    "competitorAnalysis": {
+      "strengths": ["Strong brand presence", "Good content quality"],
+      "weaknesses": ["Poor mobile experience", "Slow loading"]
+    },
+    "contentGaps": ["Missing FAQ section", "No video content"],
+    "feedback": "Several areas need improvement for better SEO performance",
+    "rawAnalysis": {
+      "test": "data"
+    }
+  }
+}

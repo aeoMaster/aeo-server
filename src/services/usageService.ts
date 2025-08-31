@@ -60,7 +60,12 @@ export class UsageService {
   ) {
     try {
       console.log("🔍 UsageService.trackUsage called");
-      console.log("Parameters:", { userId, companyId, type, amount });
+      console.log("Parameters:", {
+        userId,
+        companyId,
+        type,
+        amount,
+      });
 
       if (!userId && !companyId) {
         throw new AppError(400, "Either userId or companyId must be provided");
@@ -105,40 +110,59 @@ export class UsageService {
         };
       }
 
-      console.log("🔍 Looking for usage record...");
-      // Determine owner: user or company (never both)
-      let usageOwner: { user?: any; company?: any } = {};
-      if (companyId) {
-        usageOwner = { company: companyId };
-      } else if (userId) {
-        usageOwner = { user: userId };
+      // First, ensure usage records exist by calling getCurrentUsage
+      // This will create missing usage records if needed
+      let currentUsageData;
+      if (userId) {
+        currentUsageData = await this.getCurrentUsage(userId, companyId);
+      } else if (companyId) {
+        // If no userId but we have companyId, we need to find the company owner
+        const company = await Company.findById(companyId)
+          .select("owner")
+          .lean();
+        if (company?.owner) {
+          currentUsageData = await this.getCurrentUsage(
+            company.owner.toString(),
+            companyId
+          );
+        }
       }
 
-      // Get current usage record
+      // Check if we have the usage data for the requested type
+      if (!currentUsageData || !currentUsageData[type]) {
+        console.log("❌ No usage data found for type:", type);
+        throw new AppError(
+          404,
+          `No usage data found for ${type}. Please contact support to initialize your usage records.`
+        );
+      }
+
+      const usageInfo = currentUsageData[type];
+      console.log("🔍 Found usage info:", usageInfo);
+
+      // Check if usage limit is exceeded
+      if (usageInfo.remaining < amount) {
+        console.log("❌ Usage limit exceeded");
+        throw new AppError(403, "Usage limit exceeded");
+      }
+
+      // Now look for the specific usage record to update
+      const usageIdentifier = companyId
+        ? { company: companyId }
+        : { user: userId };
+
       const usage = await Usage.findOne({
-        ...usageOwner,
+        ...usageIdentifier,
         type,
         "period.end": { $gt: new Date() },
       });
 
-      console.log("🔍 Usage record found:", usage ? "Yes" : "No");
-      if (usage) {
-        console.log("🔍 Current usage:", {
-          used: usage.limits.used,
-          remaining: usage.limits.remaining,
-          total: usage.limits.total,
-        });
-      }
-
       if (!usage) {
-        console.log("❌ No active usage record found");
-        throw new AppError(404, "No active usage record found");
-      }
-
-      // Check if usage limit is exceeded
-      if (usage.limits.remaining < amount) {
-        console.log("❌ Usage limit exceeded");
-        throw new AppError(403, "Usage limit exceeded");
+        console.log("❌ No usage record found for updating");
+        throw new AppError(
+          404,
+          "Usage record not found for updating. Please contact support."
+        );
       }
 
       console.log("✅ Updating usage...");
@@ -271,7 +295,7 @@ export class UsageService {
     console.log("🔍 Usage identifier:", usageIdentifier);
 
     // Get only the most recent active usage records
-    const usageDocs = await Usage.find({
+    let usageDocs = await Usage.find({
       ...usageIdentifier,
       "period.end": { $gt: new Date() },
     }).sort({ updatedAt: -1 }); // Sort by most recently updated
@@ -299,6 +323,23 @@ export class UsageService {
         ],
       });
       console.log("🔍 Cleanup completed");
+    }
+
+    // Also clean up any usage records with 0 totals in current period
+    const zeroTotalRecords = usageDocs.filter((doc) => doc.limits.total === 0);
+    if (zeroTotalRecords.length > 0) {
+      console.log(
+        `🔍 Found ${zeroTotalRecords.length} records with 0 totals, cleaning them up...`
+      );
+      const zeroTotalIds = zeroTotalRecords.map((doc) => doc._id);
+      await Usage.deleteMany({ _id: { $in: zeroTotalIds } });
+      console.log("🔍 Zero total records cleaned up");
+
+      // Refresh the usage docs after cleanup
+      usageDocs = await Usage.find({
+        ...usageIdentifier,
+        "period.end": { $gt: new Date() },
+      }).sort({ updatedAt: -1 });
     }
 
     let usageData = this.formatUsage(usageDocs);
@@ -331,54 +372,57 @@ export class UsageService {
       }
     }
 
-    if (usageDocs.length > 0) {
-      console.log("🔍 Returning existing usage data");
-      return usageData;
-    }
-
-    // No usage records found, so we'll create them.
-    const ownerId = companyId
-      ? (
-          await Company.findById(companyId).select("owner").lean()
-        )?.owner?.toString()
-      : userId;
-
-    console.log(
-      "🔍 No usage records found, creating new ones. ownerId:",
-      ownerId
+    // Check if we need to create missing usage records
+    const expectedTypes = [
+      "analysis",
+      "clarity_scan",
+      "chat_message",
+      "api_call",
+      "storage",
+    ] as const;
+    const existingTypes = usageDocs.map((doc) => doc.type);
+    const missingTypes = expectedTypes.filter(
+      (type) => !existingTypes.includes(type)
     );
-    if (!ownerId) {
-      throw new AppError(404, "Could not determine subscription owner.");
+
+    if (missingTypes.length > 0) {
+      console.log(
+        `🔍 Found missing usage record types: ${missingTypes.join(", ")}`
+      );
+
+      // Get subscription to create missing records
+      const ownerId = companyId
+        ? (
+            await Company.findById(companyId).select("owner").lean()
+          )?.owner?.toString()
+        : userId;
+
+      if (ownerId) {
+        const subscription = await Subscription.findOne({
+          user: ownerId,
+          status: { $in: ["active", "trial"] },
+        })
+          .populate<{ package: IPackage }>("package")
+          .lean();
+
+        if (subscription && subscription.package) {
+          console.log("🔍 Creating missing usage records...");
+          const missingUsageData = await this.createMissingUsageRecords(
+            userId,
+            companyId,
+            subscription,
+            missingTypes
+          );
+
+          // Merge the missing usage data with existing data
+          Object.assign(usageData, missingUsageData);
+          console.log("🔍 Merged missing usage data:", missingUsageData);
+        }
+      }
     }
 
-    const subscription = await Subscription.findOne({
-      user: ownerId,
-      status: { $in: ["active", "trial"] }, // Include both active and trial subscriptions
-    })
-      .populate<{ package: IPackage }>("package")
-      .lean();
-    console.log("🔍 Found subscription:", subscription ? "Yes" : "No");
-
-    if (!subscription || !subscription.package) {
-      console.log("🔍 No subscription found, returning empty usage data");
-      return usageData; // Return usage data with members info if available
-    }
-
-    // Create new usage records based on the subscription package
-    console.log("🔍 Creating new usage records...");
-    const newUsageData = await this.createAndFormatUsage(
-      userId,
-      companyId,
-      subscription
-    );
-    console.log("🔍 Created new usage data:", newUsageData);
-
-    // Merge with members data if available
-    if (companyId && usageData.members) {
-      newUsageData.members = usageData.members;
-    }
-
-    return newUsageData;
+    console.log("🔍 Returning usage data with all types");
+    return usageData;
   }
 
   /**
@@ -388,14 +432,10 @@ export class UsageService {
     const usageData: Record<
       string,
       { used: number; remaining: number; total: number }
-    > = {
-      analysis: { used: 0, remaining: 0, total: 0 },
-      clarity_scan: { used: 0, remaining: 0, total: 0 },
-      chat_message: { used: 0, remaining: 0, total: 0 },
-      api_call: { used: 0, remaining: 0, total: 0 },
-      storage: { used: 0, remaining: 0, total: 0 },
-      members: { used: 0, remaining: 0, total: 0 },
-    };
+    > = {};
+
+    // Only initialize types that we have actual records for
+    // Don't pre-initialize with 0 values
 
     // Group by type and find the best record for each type
     const groupedByType: Record<string, IUsage[]> = {};
@@ -409,29 +449,30 @@ export class UsageService {
 
     // For each type, use the best record (prioritize non-zero totals and recent periods)
     for (const [type, docs] of Object.entries(groupedByType)) {
-      if (usageData[type]) {
-        // Sort by multiple criteria:
-        // 1. Non-zero totals first
-        // 2. More recent period end dates
-        // 3. More recent updatedAt timestamps
-        const bestRecord = docs.sort((a, b) => {
-          // First priority: non-zero totals
-          const aHasTotal = a.limits.total > 0;
-          const bHasTotal = b.limits.total > 0;
-          if (aHasTotal && !bHasTotal) return -1;
-          if (!aHasTotal && bHasTotal) return 1;
+      // Sort by multiple criteria:
+      // 1. Non-zero totals first
+      // 2. More recent period end dates
+      // 3. More recent updatedAt timestamps
+      const bestRecord = docs.sort((a, b) => {
+        // First priority: non-zero totals
+        const aHasTotal = a.limits.total > 0;
+        const bHasTotal = b.limits.total > 0;
+        if (aHasTotal && !bHasTotal) return -1;
+        if (!aHasTotal && bHasTotal) return 1;
 
-          // Second priority: more recent period end
-          const aPeriodEnd = new Date(a.period.end).getTime();
-          const bPeriodEnd = new Date(b.period.end).getTime();
-          if (aPeriodEnd !== bPeriodEnd) return bPeriodEnd - aPeriodEnd;
+        // Second priority: more recent period end
+        const aPeriodEnd = new Date(a.period.end).getTime();
+        const bPeriodEnd = new Date(b.period.end).getTime();
+        if (aPeriodEnd !== bPeriodEnd) return bPeriodEnd - aPeriodEnd;
 
-          // Third priority: more recent updatedAt
-          const aUpdatedAt = new Date(a.updatedAt).getTime();
-          const bUpdatedAt = new Date(b.updatedAt).getTime();
-          return bUpdatedAt - aUpdatedAt;
-        })[0];
+        // Third priority: more recent updatedAt
+        const aUpdatedAt = new Date(a.updatedAt).getTime();
+        const bUpdatedAt = new Date(b.updatedAt).getTime();
+        return bUpdatedAt - aUpdatedAt;
+      })[0];
 
+      // Only add usage data if the record has a valid total
+      if (bestRecord.limits.total > 0) {
         usageData[type] = {
           used: bestRecord.limits.used,
           remaining: bestRecord.limits.remaining,
@@ -444,6 +485,8 @@ export class UsageService {
           periodEnd: bestRecord.period.end,
           updatedAt: bestRecord.updatedAt,
         });
+      } else {
+        console.log(`🔍 Skipping ${type} record with 0 total`);
       }
     }
 
@@ -451,29 +494,25 @@ export class UsageService {
   }
 
   /**
-   * Helper to create usage records for all types and formats them.
+   * Helper to create missing usage records for specific types.
    */
-  private static async createAndFormatUsage(
+  private static async createMissingUsageRecords(
     userId: string,
     companyId: string | undefined,
-    subscription: any
+    subscription: any,
+    missingTypes: string[]
   ) {
     const { features } = subscription.package;
-    const usageTypes = [
-      "analysis",
-      "clarity_scan",
-      "chat_message",
-      "api_call",
-      "storage",
-    ] as const;
     const newUsageDocs: IUsage[] = [];
 
     const period = {
-      start: subscription.currentPeriodStart,
-      end: subscription.currentPeriodEnd,
+      start: subscription.currentPeriodStart || new Date(),
+      end:
+        subscription.currentPeriodEnd ||
+        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     };
 
-    for (const type of usageTypes) {
+    for (const type of missingTypes) {
       let total = 0;
       switch (type) {
         case "analysis":
@@ -493,17 +532,39 @@ export class UsageService {
           break;
       }
 
-      const newUsage = await Usage.create({
-        user: companyId ? undefined : userId,
-        company: companyId,
-        type: type,
-        period,
-        limits: { total, used: 0, remaining: total },
-      });
-      newUsageDocs.push(newUsage);
+      if (total > 0) {
+        const newUsage = await Usage.create({
+          user: companyId ? undefined : userId,
+          company: companyId,
+          type: type,
+          period,
+          limits: { total, used: 0, remaining: total },
+          count: 0,
+        });
+        newUsageDocs.push(newUsage);
+        console.log(
+          `✅ Created missing usage record for ${type}: total=${total}`
+        );
+      } else {
+        console.log(`⚠️ Skipping ${type} - no limit defined in package`);
+      }
     }
 
-    return this.formatUsage(newUsageDocs);
+    // Format and return the newly created usage data
+    const usageData: Record<
+      string,
+      { used: number; remaining: number; total: number }
+    > = {};
+
+    for (const doc of newUsageDocs) {
+      usageData[doc.type] = {
+        used: doc.limits.used,
+        remaining: doc.limits.remaining,
+        total: doc.limits.total,
+      };
+    }
+
+    return usageData;
   }
 
   /**
@@ -548,6 +609,7 @@ export class UsageService {
       const usage = await Usage.findOne({
         ...usageIdentifier,
         type: type,
+        "period.end": { $gt: new Date() }, // Only check current period
       });
       const used = usage ? usage.limits.used : 0;
 

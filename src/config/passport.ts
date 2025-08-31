@@ -19,7 +19,7 @@ export const initializePassport = (): void => {
       },
       async (payload: JwtPayload, done) => {
         try {
-          const user = await User.findById(payload.id);
+          const user = await User.findById(payload.id).populate("company");
           if (user) {
             return done(null, user as any);
           }

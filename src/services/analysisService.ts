@@ -48,13 +48,20 @@ export class AnalysisService {
       if (filters.search) {
         query.$or = [
           { content: { $regex: filters.search, $options: "i" } },
-          { company: { $regex: filters.search, $options: "i" } },
+          { companyName: { $regex: filters.search, $options: "i" } },
           { section: { $regex: filters.search, $options: "i" } },
         ];
       }
 
       if (filters.type) query.type = filters.type;
-      if (filters.company) query.company = filters.company;
+      if (filters.company) {
+        try {
+          query.company = new mongoose.Types.ObjectId(filters.company);
+        } catch (error) {
+          // If conversion fails, use the string as is
+          query.company = filters.company;
+        }
+      }
       if (filters.section) query.section = filters.section;
       if (filters.startDate || filters.endDate) {
         query.createdAt = {};
