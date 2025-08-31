@@ -8,6 +8,7 @@ import { IUser } from "@/models/User";
 const historyQuerySchema = z.object({
   search: z.string().optional(),
   type: z.string().optional(),
+  url: z.string().optional(),
   company: z.string().optional(),
   section: z.string().optional(),
   startDate: z
@@ -48,6 +49,7 @@ export class AnalysisController {
       const {
         search,
         type,
+        url,
         company,
         section,
         startDate,
@@ -59,7 +61,7 @@ export class AnalysisController {
 
       const result = await AnalysisService.getAnalysisHistory(
         userId,
-        { search, type, company, section, startDate, endDate },
+        { search, type, url, company, section, startDate, endDate },
         { page, limit },
         grouped
       );

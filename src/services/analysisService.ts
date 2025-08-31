@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 interface AnalysisFilters {
   search?: string;
   type?: string;
+  url?: string;
   company?: string;
   section?: string;
   startDate?: Date;
@@ -54,6 +55,7 @@ export class AnalysisService {
       }
 
       if (filters.type) query.type = filters.type;
+      if (filters.url) query.url = filters.url;
       if (filters.company) {
         try {
           query.company = new mongoose.Types.ObjectId(filters.company);
