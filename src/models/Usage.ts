@@ -5,7 +5,7 @@ import { ICompany } from "./Company";
 export interface IUsage extends Document {
   user?: IUser["_id"];
   company?: ICompany["_id"];
-  type: "analysis" | "clarity_scan" | "chat_message" | "api_call" | "storage";
+  type: "analysis" | "clarity_scan" | "chat_message" | "storage";
   count: number;
   period: {
     start: Date;
@@ -31,7 +31,7 @@ const usageSchema = new Schema<IUsage>({
   },
   type: {
     type: String,
-    enum: ["analysis", "clarity_scan", "chat_message", "api_call", "storage"],
+    enum: ["analysis", "clarity_scan", "chat_message", "storage"],
     required: true,
   },
   count: {

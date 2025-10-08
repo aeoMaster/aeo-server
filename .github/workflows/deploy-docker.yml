@@ -1,0 +1,168 @@
+name: Deploy to EC2 with Docker (Zero Downtime)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on:
+      - self-hosted
+      - prod
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Create .env file from secrets
+        run: |
+          cat > .env << EOF
+          NODE_ENV=production
+          PORT=5000
+
+          # Database (MongoDB Atlas + Cloud Redis)
+          MONGODB_URI=${{ secrets.MONGODB_URI }}
+          REDIS_URL=${{ secrets.REDIS_URL }}
+
+          # Authentication
+          AUTH_PROVIDER=${{ secrets.AUTH_PROVIDER }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_EXPIRES_IN=${{ secrets.JWT_EXPIRES_IN }}
+
+          # Cognito
+          AWS_REGION=${{ secrets.AWS_REGION }}
+          AWS_COGNITO_USER_POOL_ID=${{ secrets.AWS_COGNITO_USER_POOL_ID }}
+          AWS_COGNITO_CLIENT_ID=${{ secrets.AWS_COGNITO_CLIENT_ID }}
+          AWS_COGNITO_DOMAIN=${{ secrets.AWS_COGNITO_DOMAIN }}
+          OAUTH_REDIRECT_URI=${{ secrets.OAUTH_REDIRECT_URI }}
+          OAUTH_LOGOUT_REDIRECT_URI=${{ secrets.OAUTH_LOGOUT_REDIRECT_URI }}
+          SESSION_SECRET=${{ secrets.SESSION_SECRET }}
+          SESSION_TTL_SECONDS=${{ secrets.SESSION_TTL_SECONDS }}
+          COOKIE_NAME=${{ secrets.COOKIE_NAME }}
+
+          # OAuth
+          GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REDIRECT_URI=${{ secrets.GOOGLE_REDIRECT_URI }}
+          LINKEDIN_CLIENT_ID=${{ secrets.LINKEDIN_CLIENT_ID }}
+          LINKEDIN_CLIENT_SECRET=${{ secrets.LINKEDIN_CLIENT_SECRET }}
+          LINKEDIN_REDIRECT_URI=${{ secrets.LINKEDIN_REDIRECT_URI }}
+
+          # Frontend
+          CLIENT_URL=${{ secrets.CLIENT_URL }}
+          FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+
+          # API Keys
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          # STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+          # STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          # SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}
+          # SENDGRID_FROM_EMAIL=${{ secrets.SENDGRID_FROM_EMAIL }}
+          # SENDGRID_TEMPLATE_IDS=${{ secrets.SENDGRID_TEMPLATE_IDS }}
+          USE_MOCK_EMAIL=${{ secrets.USE_MOCK_EMAIL }}
+          PAGESPEED_API_KEY=${{ secrets.PAGESPEED_API_KEY }}
+
+          # AWS
+          AWS_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }}
+          AWS_SECRET_KEY=${{ secrets.AWS_SECRET_KEY }}
+          AWS_REGION=${{ secrets.AWS_REGION }}
+          EOF
+
+      - name: Build new Docker image
+        run: |
+          docker build -t aeo-server:${{ github.sha }} .
+          docker tag aeo-server:${{ github.sha }} aeo-server:latest
+
+      - name: Check current deployment color
+        id: check_color
+        run: |
+          # Check which container is currently running
+          if docker ps --format '{{.Names}}' | grep -q "aeo-server-blue"; then
+            echo "current_color=blue" >> $GITHUB_OUTPUT
+            echo "deploy_color=green" >> $GITHUB_OUTPUT
+          else
+            echo "current_color=green" >> $GITHUB_OUTPUT
+            echo "deploy_color=blue" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Start Nginx load balancer
+        run: |
+          docker-compose -f docker-compose.prod.yml up -d nginx
+
+      - name: Deploy to ${{ steps.check_color.outputs.deploy_color }} environment
+        run: |
+          # Deploy new version to inactive color
+          docker-compose -f docker-compose.prod.yml up -d app-${{ steps.check_color.outputs.deploy_color }}
+
+      - name: Wait for new deployment to be healthy
+        run: |
+          echo "Waiting for app-${{ steps.check_color.outputs.deploy_color }} to be healthy..."
+          for i in {1..30}; do
+            if docker exec aeo-server-${{ steps.check_color.outputs.deploy_color }} node -e "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" 2>/dev/null; then
+              echo "✅ New deployment is healthy!"
+              break
+            fi
+            echo "Attempt $i/30: Waiting for health check..."
+            sleep 2
+            
+            if [ $i -eq 30 ]; then
+              echo "❌ Health check failed after 30 attempts"
+              docker logs aeo-server-${{ steps.check_color.outputs.deploy_color }} --tail 50
+              exit 1
+            fi
+          done
+
+      - name: Gracefully stop old deployment
+        if: success()
+        run: |
+          # Give new deployment a moment to fully initialize
+          sleep 5
+
+          # Gracefully stop old container
+          if [ "${{ steps.check_color.outputs.current_color }}" != "" ]; then
+            echo "Stopping old deployment (app-${{ steps.check_color.outputs.current_color }})..."
+            docker-compose -f docker-compose.prod.yml stop app-${{ steps.check_color.outputs.current_color }}
+            docker-compose -f docker-compose.prod.yml rm -f app-${{ steps.check_color.outputs.current_color }}
+          fi
+
+      - name: Verify deployment
+        run: |
+          echo "=== Deployment Summary ==="
+          docker-compose -f docker-compose.prod.yml ps
+
+          echo ""
+          echo "=== Health Check ==="
+          curl -f http://localhost:5000/health || exit 1
+
+          echo ""
+          echo "=== Recent Logs ==="
+          docker logs aeo-server-${{ steps.check_color.outputs.deploy_color }} --tail 20
+
+      - name: Cleanup old images
+        if: success()
+        run: |
+          # Remove old unused images (keep last 3)
+          docker images aeo-server --format "{{.ID}} {{.Tag}}" | grep -v "latest" | tail -n +4 | awk '{print $1}' | xargs -r docker rmi || true
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed, rolling back..."
+          docker-compose -f docker-compose.prod.yml stop app-${{ steps.check_color.outputs.deploy_color }}
+          docker-compose -f docker-compose.prod.yml rm -f app-${{ steps.check_color.outputs.deploy_color }}
+
+          # Ensure old deployment is still running
+          docker-compose -f docker-compose.prod.yml up -d app-${{ steps.check_color.outputs.current_color }}
+
+          echo "Rollback completed"
+          exit 1
+
+      - name: Send deployment notification
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment successful to ${{ steps.check_color.outputs.deploy_color }} environment"
+          else
+            echo "❌ Deployment failed, system rolled back to ${{ steps.check_color.outputs.current_color }} environment"
+          fi

@@ -15,8 +15,8 @@ export const seedPackages = async () => {
       },
       billingCycle: "monthly",
       features: {
-        maxAnalyses: 2,
-        maxClarityScans: 5,
+        maxAnalyses: 1,
+        maxClarityScans: 3,
         maxChatMessages: 0,
         maxUsers: 1,
         advancedReporting: false,
@@ -42,8 +42,8 @@ export const seedPackages = async () => {
       description: "Perfect for individuals and small websites",
       type: "individual",
       price: {
-        monthly: 29,
-        yearly: 299, // 29 * 10.5
+        monthly: 49,
+        yearly: 499, // 49 * 10.5
       },
       stripePriceId: {
         monthly: "price_starter_monthly",
@@ -51,8 +51,8 @@ export const seedPackages = async () => {
       },
       billingCycle: "monthly",
       features: {
-        maxAnalyses: 15,
-        maxClarityScans: 30,
+        maxAnalyses: 25,
+        maxClarityScans: 40,
         maxChatMessages: 75,
         maxUsers: 1,
         advancedReporting: false,
@@ -78,8 +78,8 @@ export const seedPackages = async () => {
       description: "For growing teams and ambitious marketers",
       type: "company",
       price: {
-        monthly: 79,
-        yearly: 829, // 79 * 10.5
+        monthly: 89,
+        yearly: 899, // 89 * 10.5
       },
       stripePriceId: {
         monthly: "price_growth_monthly",
@@ -114,8 +114,8 @@ export const seedPackages = async () => {
       description: "Ideal for agencies and consultants",
       type: "company",
       price: {
-        monthly: 129,
-        yearly: 1359, // 129 * 10.5
+        monthly: 139,
+        yearly: 1299, // 129 * 10.5
       },
       stripePriceId: {
         monthly: "price_pro_monthly",
@@ -150,8 +150,8 @@ export const seedPackages = async () => {
       description: "For high-scale operations and data-driven teams",
       type: "company",
       price: {
-        monthly: 199,
-        yearly: 2089, // 199 * 10.5
+        monthly: 229,
+        yearly: 2199, // 229 * 10.5
       },
       stripePriceId: {
         monthly: "price_business_monthly",

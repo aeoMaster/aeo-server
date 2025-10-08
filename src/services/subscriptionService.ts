@@ -150,7 +150,6 @@ export class SubscriptionService {
         "analysis",
         "clarity_scan",
         "chat_message",
-        "api_call",
         "storage",
       ] as const;
       const period = {
@@ -175,9 +174,6 @@ export class SubscriptionService {
             break;
           case "chat_message":
             total = package_.features.maxChatMessages ?? 0;
-            break;
-          case "api_call":
-            total = 1000; // Default API call limit
             break;
           case "storage":
             total = 1000; // Default storage limit
@@ -332,7 +328,6 @@ export class SubscriptionService {
           "analysis",
           "clarity_scan",
           "chat_message",
-          "api_call",
           "storage",
         ] as const;
         const period = {
@@ -352,7 +347,6 @@ export class SubscriptionService {
             case "chat_message":
               total = subscription.package.features.maxChatMessages ?? 0;
               break;
-            case "api_call":
             case "storage":
               total = 1000; // Default limits
               break;
@@ -452,14 +446,12 @@ export class SubscriptionService {
         "analysis",
         "clarity_scan",
         "chat_message",
-        "api_call",
         "storage",
       ] as const;
       const usageLimits = {
         analysis: { total: 2, used: 0, remaining: 2 },
         clarity_scan: { total: 5, used: 0, remaining: 5 },
         chat_message: { total: 0, used: 0, remaining: 0 },
-        api_call: { total: 100, used: 0, remaining: 100 },
         storage: { total: 100, used: 0, remaining: 100 },
       };
 
@@ -509,7 +501,6 @@ export class SubscriptionService {
       "analysis",
       "clarity_scan",
       "chat_message",
-      "api_call",
       "storage",
     ] as const;
     const period = {
@@ -532,7 +523,6 @@ export class SubscriptionService {
         case "chat_message":
           total = features.maxChatMessages ?? 0;
           break;
-        case "api_call":
         case "storage":
           total = 1000; // Default limits
           break;

@@ -1,14 +1,16 @@
 import { Package, IPackage } from "../models/Package";
 
 // This function is used by the seeder script.
+// It will UPDATE existing packages or INSERT new ones
 export const upsertPackage = async (
   name: string,
   data: Record<string, any>
 ) => {
+  const packageData = { ...data, name };
   await Package.findOneAndUpdate(
     { name },
-    { $set: data, $setOnInsert: { name } },
-    { upsert: true, new: true }
+    { $set: packageData },
+    { upsert: true, new: true, runValidators: true }
   );
 };
 

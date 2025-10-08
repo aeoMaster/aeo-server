@@ -7,8 +7,11 @@ export interface IUser extends Document {
   email: string;
   password?: string;
   googleId?: string;
+  cognitoSub?: string;
   company?: mongoose.Types.ObjectId | ICompany;
   role: "owner" | "admin" | "user" | "viewer";
+  roles: string[];
+  cognitoGroups: string[];
   subscription?: mongoose.Types.ObjectId;
   stripeCustomerId?: string;
   status: "active" | "suspended" | "deleted";
@@ -45,6 +48,11 @@ const userSchema = new Schema<IUser>({
     unique: true,
     sparse: true,
   },
+  cognitoSub: {
+    type: String,
+    unique: true,
+    sparse: true,
+  },
   company: {
     type: Schema.Types.ObjectId,
     ref: "Company",
@@ -54,6 +62,17 @@ const userSchema = new Schema<IUser>({
     enum: ["owner", "admin", "user", "viewer"],
     default: "user",
   },
+  roles: [
+    {
+      type: String,
+      enum: ["owner", "admin", "user", "viewer"],
+    },
+  ],
+  cognitoGroups: [
+    {
+      type: String,
+    },
+  ],
   subscription: {
     type: Schema.Types.ObjectId,
     ref: "Subscription",

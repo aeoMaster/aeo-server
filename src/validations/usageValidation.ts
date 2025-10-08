@@ -5,7 +5,6 @@ export const trackUsageSchema = z.object({
     "analysis",
     "clarity_scan",
     "chat_message",
-    "api_call",
     "storage",
     "members",
   ]),

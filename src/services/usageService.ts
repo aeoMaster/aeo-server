@@ -9,13 +9,7 @@ export class UsageService {
   static async getUsageHistory(
     userId: string | undefined,
     companyId: string | undefined,
-    type?:
-      | "analysis"
-      | "clarity_scan"
-      | "chat_message"
-      | "api_call"
-      | "storage"
-      | string,
+    type?: "analysis" | "clarity_scan" | "chat_message" | "storage" | string,
     page: number = 1,
     limit: number = 10
   ) {
@@ -49,13 +43,7 @@ export class UsageService {
   static async trackUsage(
     userId: string | undefined,
     companyId: string | undefined,
-    type:
-      | "analysis"
-      | "clarity_scan"
-      | "chat_message"
-      | "api_call"
-      | "storage"
-      | "members",
+    type: "analysis" | "clarity_scan" | "chat_message" | "storage" | "members",
     amount: number = 1
   ) {
     try {
@@ -188,7 +176,7 @@ export class UsageService {
   static async getUsage(
     userId: string | undefined,
     companyId: string | undefined,
-    type: "analysis" | "clarity_scan" | "chat_message" | "api_call" | "storage"
+    type: "analysis" | "clarity_scan" | "chat_message" | "storage"
   ) {
     try {
       // Determine owner: user or company (never both)
@@ -230,9 +218,8 @@ export class UsageService {
         | "analysis"
         | "clarity_scan"
         | "chat_message"
-        | "api_call"
         | "storage"
-      )[] = ["analysis", "clarity_scan", "chat_message", "api_call", "storage"];
+      )[] = ["analysis", "clarity_scan", "chat_message", "storage"];
       const periodEnd = new Date(
         Date.now() +
           (subscription.billingCycle === "monthly" ? 30 : 365) *
@@ -254,7 +241,6 @@ export class UsageService {
           case "chat_message":
             total = subscription.package.features.maxChatMessages ?? 0;
             break;
-          case "api_call":
           case "storage":
             total = 1000; // Default limits
             break;
@@ -377,7 +363,6 @@ export class UsageService {
       "analysis",
       "clarity_scan",
       "chat_message",
-      "api_call",
       "storage",
     ] as const;
     const existingTypes = usageDocs.map((doc) => doc.type);
@@ -523,9 +508,6 @@ export class UsageService {
           break;
         case "chat_message":
           total = features.maxChatMessages ?? 0;
-          break;
-        case "api_call":
-          total = 1000; // Default API call limit
           break;
         case "storage":
           total = 1000; // Default storage limit

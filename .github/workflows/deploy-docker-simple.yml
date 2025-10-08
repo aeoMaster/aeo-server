@@ -1,0 +1,129 @@
+name: Deploy to EC2 with Docker (Simple - Single Container)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on:
+      - self-hosted
+      - prod
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Create .env file from secrets
+        run: |
+          cat > .env << EOF
+          NODE_ENV=production
+          PORT=5000
+
+          # Database (MongoDB Atlas + Cloud Redis)
+          MONGODB_URI=${{ secrets.MONGODB_URI }}
+          REDIS_URL=${{ secrets.REDIS_URL }}
+
+          # Authentication
+          AUTH_PROVIDER=${{ secrets.AUTH_PROVIDER }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_EXPIRES_IN=${{ secrets.JWT_EXPIRES_IN }}
+
+          # Cognito
+          COGNITO_REGION=${{ secrets.COGNITO_REGION }}
+          COGNITO_USER_POOL_ID=${{ secrets.COGNITO_USER_POOL_ID }}
+          COGNITO_APP_CLIENT_ID=${{ secrets.COGNITO_APP_CLIENT_ID }}
+          COGNITO_DOMAIN=${{ secrets.COGNITO_DOMAIN }}
+          OAUTH_REDIRECT_URI=${{ secrets.OAUTH_REDIRECT_URI }}
+          OAUTH_LOGOUT_REDIRECT_URI=${{ secrets.OAUTH_LOGOUT_REDIRECT_URI }}
+          SESSION_SECRET=${{ secrets.SESSION_SECRET }}
+          SESSION_TTL_SECONDS=${{ secrets.SESSION_TTL_SECONDS }}
+          COOKIE_NAME=${{ secrets.COOKIE_NAME }}
+
+          # OAuth
+          GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REDIRECT_URI=${{ secrets.GOOGLE_REDIRECT_URI }}
+          LINKEDIN_CLIENT_ID=${{ secrets.LINKEDIN_CLIENT_ID }}
+          LINKEDIN_CLIENT_SECRET=${{ secrets.LINKEDIN_CLIENT_SECRET }}
+          LINKEDIN_REDIRECT_URI=${{ secrets.LINKEDIN_REDIRECT_URI }}
+
+          # Frontend
+          CLIENT_URL=${{ secrets.CLIENT_URL }}
+          FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+
+          # API Keys
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}
+          SENDGRID_FROM_EMAIL=${{ secrets.SENDGRID_FROM_EMAIL }}
+          SENDGRID_TEMPLATE_IDS=${{ secrets.SENDGRID_TEMPLATE_IDS }}
+          USE_MOCK_EMAIL=${{ secrets.USE_MOCK_EMAIL }}
+          PAGESPEED_API_KEY=${{ secrets.PAGESPEED_API_KEY }}
+
+          # AWS
+          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION=${{ secrets.AWS_REGION }}
+          EOF
+
+      - name: Build new Docker image
+        run: |
+          docker build -t aeo-server:${{ github.sha }} .
+          docker tag aeo-server:${{ github.sha }} aeo-server:latest
+
+      - name: Stop current container
+        run: |
+          docker-compose -f docker-compose.simple.yml down || true
+
+      - name: Start new container
+        run: |
+          docker-compose -f docker-compose.simple.yml up -d
+
+      - name: Wait for deployment to be healthy
+        run: |
+          echo "Waiting for container to be healthy..."
+          for i in {1..30}; do
+            if curl -f http://localhost:5000/health > /dev/null 2>&1; then
+              echo "✅ Deployment is healthy!"
+              break
+            fi
+            echo "Attempt $i/30: Waiting for health check..."
+            sleep 2
+            
+            if [ $i -eq 30 ]; then
+              echo "❌ Health check failed after 30 attempts"
+              docker logs aeo-server --tail 50
+              exit 1
+            fi
+          done
+
+      - name: Verify deployment
+        run: |
+          echo "=== Deployment Summary ==="
+          docker ps
+
+          echo ""
+          echo "=== Health Check ==="
+          curl http://localhost:5000/health
+
+          echo ""
+          echo "=== Recent Logs ==="
+          docker logs aeo-server --tail 20
+
+      - name: Cleanup old images
+        if: success()
+        run: |
+          # Remove old unused images (keep last 3)
+          docker images aeo-server --format "{{.ID}} {{.Tag}}" | grep -v "latest" | tail -n +4 | awk '{print $1}' | xargs -r docker rmi || true
+
+      - name: Send deployment notification
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment successful"
+          else
+            echo "❌ Deployment failed"
+          fi

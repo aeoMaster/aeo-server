@@ -1,0 +1,65 @@
+# Node modules
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Build output
+dist
+build
+*.js.map
+
+# Development files
+.env
+.env.*
+!.env.docker.example
+
+# Git
+.git
+.gitignore
+.github
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+.nyc_output
+*.test.ts
+*.spec.ts
+__tests__
+
+# Documentation
+*.md
+!README.md
+
+# AWS
+.elasticbeanstalk
+.aws
+*.pem
+*.pkg
+AWSCLIV2.pkg
+
+# Scripts
+scripts/deploy.sh
+scripts/setup-aws.sh
+scripts/complete-setup.sh
+
+# Test files
+test-*.js
+jest.config.js
+tsconfig.test.json
+
+# Temporary files
+tmp
+temp
+logs
+*.log
+

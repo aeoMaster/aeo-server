@@ -5,6 +5,7 @@ import { z } from "zod";
 import { User, IUser } from "../models/User";
 import { AppError } from "../middleware/errorHandler";
 import { SubscriptionService } from "../services/subscriptionService";
+import { configService } from "../services/configService";
 
 const router = Router();
 
@@ -20,8 +21,16 @@ const loginSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters long"),
 });
 
-// Signup route
+// Signup route (legacy auth only)
 router.post("/signup", async (req, res, next) => {
+  // Check if Cognito auth is enabled
+  if (configService.isCognitoAuth()) {
+    res.status(404).json({
+      status: "error",
+      message: "Local signup is disabled. Please use Cognito authentication.",
+    });
+    return;
+  }
   try {
     const { name, email, password } = signupSchema.parse(req.body);
 
@@ -70,8 +79,16 @@ router.post("/signup", async (req, res, next) => {
   }
 });
 
-// Login route
+// Login route (legacy auth only)
 router.post("/login", async (req, res, next) => {
+  // Check if Cognito auth is enabled
+  if (configService.isCognitoAuth()) {
+    res.status(404).json({
+      status: "error",
+      message: "Local login is disabled. Please use Cognito authentication.",
+    });
+    return;
+  }
   try {
     const { email, password } = loginSchema.parse(req.body);
 
@@ -100,24 +117,46 @@ router.post("/login", async (req, res, next) => {
   }
 });
 
-// Google OAuth routes
-router.get(
-  "/google",
-  passport.authenticate("google", { scope: ["profile", "email"] })
-);
+// Google OAuth routes (legacy auth only)
+router.get("/google", (req, res, next) => {
+  // Check if Cognito auth is enabled
+  if (configService.isCognitoAuth()) {
+    res.status(404).json({
+      status: "error",
+      message: "Google OAuth is disabled. Please use Cognito authentication.",
+    });
+    return;
+  }
+  passport.authenticate("google", { scope: ["profile", "email"] })(
+    req,
+    res,
+    next
+  );
+});
 
-router.get(
-  "/google/callback",
-  passport.authenticate("google", { session: false }),
-  (req, res) => {
-    console.log("req.user", req.user);
-    const user = req.user as IUser;
+router.get("/google/callback", (req, res, next) => {
+  // Check if Cognito auth is enabled
+  if (configService.isCognitoAuth()) {
+    res.status(404).json({
+      status: "error",
+      message: "Google OAuth is disabled. Please use Cognito authentication.",
+    });
+    return;
+  }
+  passport.authenticate("google", { session: false }, (err, user) => {
+    if (err || !user) {
+      return res.redirect(
+        `${process.env.CLIENT_URL}/auth/error?message=${encodeURIComponent("Authentication failed")}`
+      );
+    }
+
+    console.log("req.user", user);
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET as string, {
       expiresIn: "7d",
     });
 
     res.redirect(`${process.env.CLIENT_URL}/auth/callback?token=${token}`);
-  }
-);
+  })(req, res, next);
+});
 
 export const authRoutes = router;
