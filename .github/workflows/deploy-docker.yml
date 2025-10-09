@@ -98,6 +98,21 @@ jobs:
           AWS_REGION=${{ secrets.AWS_REGION }}
           EOF
 
+      - name: Verify .env file
+        run: |
+          echo "=== Checking .env file exists and has content ==="
+          if [ -f .env ]; then
+            echo "✅ .env file exists"
+            echo "File size: $(wc -c < .env) bytes"
+            echo "Number of lines: $(wc -l < .env)"
+            echo ""
+            echo "=== Environment variables (masked) ==="
+            grep -E "^[A-Z_]+=" .env | cut -d= -f1 | sort
+          else
+            echo "❌ .env file not found!"
+            exit 1
+          fi
+
       - name: Build new Docker image
         run: |
           docker build -t aeo-server:${{ github.sha }} .
@@ -123,6 +138,16 @@ jobs:
         run: |
           # Deploy new version to inactive color
           docker-compose -f docker-compose.prod.yml up -d app-${{ steps.check_color.outputs.deploy_color }}
+
+      - name: Debug container environment
+        run: |
+          echo "=== Checking container environment variables ==="
+          sleep 3
+          docker exec aeo-server-${{ steps.check_color.outputs.deploy_color }} env | grep -E "^(NODE_ENV|PORT|AWS_|AUTH_|MONGODB_|REDIS_)" | sort || true
+
+          echo ""
+          echo "=== Container logs (first 30 lines) ==="
+          docker logs aeo-server-${{ steps.check_color.outputs.deploy_color }} --tail 30 || true
 
       - name: Wait for new deployment to be healthy
         run: |
