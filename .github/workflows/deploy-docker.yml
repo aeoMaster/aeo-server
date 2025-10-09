@@ -86,12 +86,12 @@ jobs:
 
       - name: Start Nginx load balancer
         run: |
-          docker-compose -f docker-compose.prod.yml up -d nginx
+          docker compose -f docker-compose.prod.yml up -d nginx
 
       - name: Deploy to ${{ steps.check_color.outputs.deploy_color }} environment
         run: |
           # Deploy new version to inactive color
-          docker-compose -f docker-compose.prod.yml up -d app-${{ steps.check_color.outputs.deploy_color }}
+          docker compose -f docker-compose.prod.yml up -d app-${{ steps.check_color.outputs.deploy_color }}
 
       - name: Wait for new deployment to be healthy
         run: |
@@ -120,14 +120,14 @@ jobs:
           # Gracefully stop old container
           if [ "${{ steps.check_color.outputs.current_color }}" != "" ]; then
             echo "Stopping old deployment (app-${{ steps.check_color.outputs.current_color }})..."
-            docker-compose -f docker-compose.prod.yml stop app-${{ steps.check_color.outputs.current_color }}
-            docker-compose -f docker-compose.prod.yml rm -f app-${{ steps.check_color.outputs.current_color }}
+            docker compose -f docker-compose.prod.yml stop app-${{ steps.check_color.outputs.current_color }}
+            docker compose -f docker-compose.prod.yml rm -f app-${{ steps.check_color.outputs.current_color }}
           fi
 
       - name: Verify deployment
         run: |
           echo "=== Deployment Summary ==="
-          docker-compose -f docker-compose.prod.yml ps
+          docker compose -f docker-compose.prod.yml ps
 
           echo ""
           echo "=== Health Check ==="
@@ -147,11 +147,11 @@ jobs:
         if: failure()
         run: |
           echo "❌ Deployment failed, rolling back..."
-          docker-compose -f docker-compose.prod.yml stop app-${{ steps.check_color.outputs.deploy_color }}
-          docker-compose -f docker-compose.prod.yml rm -f app-${{ steps.check_color.outputs.deploy_color }}
+          docker compose -f docker-compose.prod.yml stop app-${{ steps.check_color.outputs.deploy_color }}
+          docker compose -f docker-compose.prod.yml rm -f app-${{ steps.check_color.outputs.deploy_color }}
 
           # Ensure old deployment is still running
-          docker-compose -f docker-compose.prod.yml up -d app-${{ steps.check_color.outputs.current_color }}
+          docker compose -f docker-compose.prod.yml up -d app-${{ steps.check_color.outputs.current_color }}
 
           echo "Rollback completed"
           exit 1
