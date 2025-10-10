@@ -36,7 +36,7 @@ export const securityHeaders = helmet({
  */
 export const enforceHttps = (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): void => {
   // Only enforce HTTPS in production
