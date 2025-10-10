@@ -52,7 +52,7 @@ jobs:
 
           # Database (MongoDB Atlas + Cloud Redis)
           MONGODB_URI=${{ secrets.MONGODB_URI }}
-          REDIS_URL=${{ secrets.REDIS_URL }}
+          # REDIS_URL=${{ secrets.REDIS_URL }}  # Commented out - not using Redis yet
 
           # Authentication
           AUTH_PROVIDER=${{ secrets.AUTH_PROVIDER }}
