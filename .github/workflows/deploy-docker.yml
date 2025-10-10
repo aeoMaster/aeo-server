@@ -64,6 +64,7 @@ jobs:
           COGNITO_USER_POOL_ID=${{ secrets.AWS_COGNITO_USER_POOL_ID }}
           COGNITO_APP_CLIENT_ID=${{ secrets.AWS_COGNITO_CLIENT_ID }}
           COGNITO_DOMAIN=${{ secrets.AWS_COGNITO_DOMAIN }}
+          # COGNITO_APP_CLIENT_SECRET=${{ secrets.AWS_COGNITO_CLIENT_SECRET }}  # Optional: only if using confidential client
           OAUTH_REDIRECT_URI=${{ secrets.OAUTH_REDIRECT_URI }}
           OAUTH_LOGOUT_REDIRECT_URI=${{ secrets.OAUTH_LOGOUT_REDIRECT_URI }}
           SESSION_SECRET=${{ secrets.SESSION_SECRET }}
