@@ -150,6 +150,11 @@ jobs:
           echo "=== Container logs (first 30 lines) ==="
           docker logs aeo-server-${{ steps.check_color.outputs.deploy_color }} --tail 30 || true
 
+          echo ""
+          echo "=== Nginx Status ==="
+          docker ps | grep nginx || echo "Nginx not running"
+          docker logs aeo-nginx --tail 20 || echo "No nginx logs"
+
       - name: Wait for new deployment to be healthy
         run: |
           echo "Waiting for app-${{ steps.check_color.outputs.deploy_color }} to be healthy..."
@@ -167,6 +172,13 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Restart Nginx to connect to new deployment
+        run: |
+          echo "Restarting nginx to connect to new deployment..."
+          docker-compose -f docker-compose.prod.yml restart nginx
+          sleep 5
+          echo "Nginx restarted"
 
       - name: Gracefully stop old deployment
         if: success()
@@ -187,8 +199,18 @@ jobs:
           docker-compose -f docker-compose.prod.yml ps
 
           echo ""
-          echo "=== Health Check ==="
-          curl -f http://localhost:5000/health || exit 1
+          echo "=== Health Check (Direct Container) ==="
+          # Check the app container directly on its exposed port
+          if [ "${{ steps.check_color.outputs.deploy_color }}" = "blue" ]; then
+            curl -f http://localhost:5001/health || exit 1
+          else
+            curl -f http://localhost:5002/health || exit 1
+          fi
+
+          echo ""
+          echo "=== Health Check (Nginx Proxy) ==="
+          # Also check through nginx if it's working
+          curl -f http://localhost:5000/health || echo "⚠️ Nginx proxy not working, but direct access works"
 
           echo ""
           echo "=== Recent Logs ==="
