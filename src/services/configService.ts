@@ -17,11 +17,15 @@ class ConfigService {
     this.config.COGNITO_USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
     this.config.COGNITO_APP_CLIENT_ID = process.env.COGNITO_APP_CLIENT_ID;
     this.config.COGNITO_DOMAIN = process.env.COGNITO_DOMAIN;
+    this.config.COGNITO_APP_CLIENT_SECRET =
+      process.env.COGNITO_APP_CLIENT_SECRET;
 
     // OAuth configuration
     this.config.OAUTH_REDIRECT_URI = process.env.OAUTH_REDIRECT_URI;
     this.config.OAUTH_LOGOUT_REDIRECT_URI =
       process.env.OAUTH_LOGOUT_REDIRECT_URI;
+    this.config.AUTH_CALLBACK_URL = process.env.AUTH_CALLBACK_URL;
+    this.config.LOGOUT_REDIRECT_URL = process.env.LOGOUT_REDIRECT_URL;
 
     // Session configuration
     this.config.SESSION_SECRET = process.env.SESSION_SECRET;
@@ -72,6 +76,7 @@ class ConfigService {
    */
   validateCognitoConfig(): void {
     const required = [
+      "COGNITO_REGION",
       "COGNITO_USER_POOL_ID",
       "COGNITO_APP_CLIENT_ID",
       "COGNITO_DOMAIN",
@@ -85,6 +90,31 @@ class ConfigService {
       throw new Error(
         `Missing required Cognito configuration: ${missing.join(", ")}`
       );
+    }
+
+    // Validate callback URL format
+    if (
+      this.config.OAUTH_REDIRECT_URI &&
+      !this.isValidUrl(this.config.OAUTH_REDIRECT_URI)
+    ) {
+      throw new Error("OAUTH_REDIRECT_URI must be a valid URL");
+    }
+
+    // Validate Cognito domain format
+    if (
+      this.config.COGNITO_DOMAIN &&
+      !this.config.COGNITO_DOMAIN.includes(".")
+    ) {
+      throw new Error(
+        "COGNITO_DOMAIN must be a valid domain (e.g., xxxx.auth.us-east-1.amazoncognito.com)"
+      );
+    }
+
+    // Log client type for debugging
+    if (this.config.COGNITO_APP_CLIENT_SECRET) {
+      console.log("🔐 Using confidential client (with secret)");
+    } else {
+      console.log("🔓 Using public client (no secret)");
     }
   }
 
@@ -149,6 +179,65 @@ class ConfigService {
     ].filter(Boolean);
 
     return [...new Set(origins)]; // Remove duplicates
+  }
+
+  /**
+   * Validate URL format
+   */
+  private isValidUrl(url: string): boolean {
+    try {
+      new URL(url);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get Cognito well-known endpoints
+   */
+  getCognitoEndpoints(): {
+    authorization: string;
+    token: string;
+    logout: string;
+    jwks: string;
+  } {
+    const domain = this.config.COGNITO_DOMAIN;
+    const region = this.config.COGNITO_REGION;
+    const userPoolId = this.config.COGNITO_USER_POOL_ID;
+
+    return {
+      authorization: `https://${domain}.auth.${region}.amazoncognito.com/login`,
+      token: `https://${domain}.auth.${region}.amazoncognito.com/oauth2/token`,
+      logout: `https://${domain}.auth.${region}.amazoncognito.com/logout`,
+      jwks: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`,
+    };
+  }
+
+  /**
+   * Get configuration summary for startup logging (non-sensitive)
+   */
+  getConfigSummary(): any {
+    const endpoints = this.getCognitoEndpoints();
+    return {
+      authProvider: this.config.AUTH_PROVIDER,
+      cognitoRegion: this.config.COGNITO_REGION,
+      cognitoDomain: this.config.COGNITO_DOMAIN,
+      clientType: this.config.COGNITO_APP_CLIENT_SECRET
+        ? "confidential"
+        : "public",
+      hasClientSecret: !!this.config.COGNITO_APP_CLIENT_SECRET,
+      hasSessionSecret: !!this.config.SESSION_SECRET,
+      sessionTtlSeconds: this.config.SESSION_TTL_SECONDS,
+      cookieName: this.config.COOKIE_NAME,
+      endpoints: {
+        authorization: endpoints.authorization,
+        token: endpoints.token,
+        logout: endpoints.logout,
+        jwks: endpoints.jwks,
+      },
+      allowedOrigins: this.getAllowedOrigins(),
+    };
   }
 }
 

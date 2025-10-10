@@ -6,10 +6,31 @@ import { jwtValidationService } from "../services/jwtValidationService";
 import { sessionService } from "../services/sessionService";
 import { roleMappingService } from "../services/roleMappingService";
 import { cognitoService } from "../services/cognitoService";
+import { configService } from "../services/configService";
 import { User } from "../models/User";
 import { SubscriptionService } from "../services/subscriptionService";
 
 const router = Router();
+
+// Helper function for structured error messages
+function getStructuredErrorMessage(
+  error: string,
+  errorDescription?: string
+): string {
+  const errorMap: { [key: string]: string } = {
+    access_denied: "User denied access to the application",
+    invalid_request: "Invalid authentication request",
+    invalid_client: "Invalid client configuration",
+    invalid_grant: "Invalid authorization grant",
+    invalid_scope: "Invalid scope requested",
+    server_error: "Authentication server error",
+    temporarily_unavailable: "Authentication service temporarily unavailable",
+  };
+
+  return (
+    errorMap[error] || errorDescription || `Authentication failed: ${error}`
+  );
+}
 
 // Validation schemas
 const forgotPasswordSchema = z.object({
@@ -52,11 +73,33 @@ setInterval(
 );
 
 /**
- * GET /auth/login
- * Initiates Cognito OAuth flow with PKCE
+ * GET /api/auth/login
+ * Builds and redirects to the Hosted UI login URL with proper validation
  */
 router.get("/login", (_req: Request, res: Response) => {
   try {
+    // Validate required configuration
+    const requiredConfig = [
+      "COGNITO_REGION",
+      "COGNITO_APP_CLIENT_ID",
+      "COGNITO_DOMAIN",
+      "OAUTH_REDIRECT_URI",
+    ];
+
+    const missing = requiredConfig.filter((key) => !configService.get(key));
+    if (missing.length > 0) {
+      throw new AppError(
+        500,
+        `Missing required configuration: ${missing.join(", ")}`
+      );
+    }
+
+    // Validate redirect URI format
+    const redirectUri = configService.get("OAUTH_REDIRECT_URI");
+    if (!redirectUri || !redirectUri.startsWith("http")) {
+      throw new AppError(500, "OAUTH_REDIRECT_URI must be a valid URL");
+    }
+
     // Generate PKCE parameters
     const codeVerifier = crypto.randomBytes(32).toString("base64url");
     const codeChallenge = crypto
@@ -72,15 +115,11 @@ router.get("/login", (_req: Request, res: Response) => {
     pkceStore.set(codeChallenge, { codeVerifier, expiresAt });
     stateStore.set(state, { expiresAt });
 
-    // Build Cognito authorization URL
-    const region = process.env.COGNITO_REGION!;
-    const clientId = process.env.COGNITO_APP_CLIENT_ID!;
-    const redirectUri = process.env.OAUTH_REDIRECT_URI!;
-    const domain = process.env.COGNITO_DOMAIN!;
+    // Build Cognito authorization URL using well-known endpoints
+    const endpoints = configService.getCognitoEndpoints();
+    const clientId = configService.get("COGNITO_APP_CLIENT_ID");
 
-    const authUrl = new URL(
-      `https://${domain}.auth.${region}.amazoncognito.com/oauth2/authorize`
-    );
+    const authUrl = new URL(`${endpoints.authorization}/oauth2/authorize`);
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("client_id", clientId);
     authUrl.searchParams.set("redirect_uri", redirectUri);
@@ -89,35 +128,41 @@ router.get("/login", (_req: Request, res: Response) => {
     authUrl.searchParams.set("code_challenge", codeChallenge);
     authUrl.searchParams.set("code_challenge_method", "S256");
 
+    console.log(`Redirecting to Cognito Hosted UI: ${authUrl.toString()}`);
     res.redirect(authUrl.toString());
   } catch (error) {
     console.error("Login initiation error:", error);
+    if (error instanceof AppError) {
+      throw error;
+    }
     throw new AppError(500, "Failed to initiate login");
   }
 });
 
 /**
- * GET /auth/callback
- * Handles Cognito OAuth callback
+ * GET /api/auth/callback
+ * Handles Cognito OAuth callback with comprehensive validation
  */
 router.get("/callback", async (req: Request, res: Response) => {
   try {
     const { code, state, error, error_description } = req.query;
 
-    // Handle OAuth errors
+    // Handle OAuth errors with structured responses
     if (error) {
       console.error("OAuth error:", error, error_description);
-      throw new AppError(
-        400,
-        `Authentication failed: ${error_description || error}`
+      const errorMessage = getStructuredErrorMessage(
+        error as string,
+        error_description as string
       );
+      throw new AppError(400, errorMessage);
     }
 
+    // Validate presence of code and state
     if (!code || !state) {
-      throw new AppError(400, "Missing authorization code or state");
+      throw new AppError(400, "Missing authorization code or state parameter");
     }
 
-    // Validate state
+    // Validate state parameter for CSRF protection
     const stateData = stateStore.get(state as string);
     if (!stateData || stateData.expiresAt < Date.now()) {
       throw new AppError(400, "Invalid or expired state parameter");
@@ -127,19 +172,19 @@ router.get("/callback", async (req: Request, res: Response) => {
     // Exchange code for tokens
     const tokens = await exchangeCodeForTokens(code as string);
 
-    // Verify ID token
+    // Verify ID token signature via JWKS
     const idToken = await jwtValidationService.verifyIdToken(tokens.id_token);
 
-    // Extract user information
+    // Extract user information from ID token
     const userInfo = jwtValidationService.extractUserInfo(idToken);
 
     // Map Cognito groups to application roles
     const userRoles = roleMappingService.mapGroupsToRoles(userInfo.groups);
 
-    // Upsert user in MongoDB
+    // Upsert user in database (idempotent operation)
     await upsertUser(userInfo, userRoles.roles);
 
-    // Create session
+    // Create secure server session
     await sessionService.createSession(req, {
       cognitoSub: userInfo.cognitoSub,
       email: userInfo.email,
@@ -148,17 +193,17 @@ router.get("/callback", async (req: Request, res: Response) => {
       groups: userInfo.groups,
     });
 
-    // Redirect to frontend
+    // Redirect to frontend success page
     const frontendUrl =
-      process.env.FRONTEND_ORIGIN ||
-      process.env.CLIENT_URL ||
+      configService.get("FRONTEND_ORIGIN") ||
+      configService.get("CLIENT_URL") ||
       "http://localhost:3000";
     res.redirect(`${frontendUrl}/dashboard`);
   } catch (error) {
     console.error("Callback error:", error);
     const frontendUrl =
-      process.env.FRONTEND_ORIGIN ||
-      process.env.CLIENT_URL ||
+      configService.get("FRONTEND_ORIGIN") ||
+      configService.get("CLIENT_URL") ||
       "http://localhost:3000";
     const errorMessage =
       error instanceof Error ? error.message : "Authentication failed";
@@ -169,20 +214,28 @@ router.get("/callback", async (req: Request, res: Response) => {
 });
 
 /**
- * POST /auth/logout
- * Logs out user and clears session
+ * POST /api/auth/logout
+ * Invalidates server session and returns Cognito logout URL
  */
 router.post("/logout", async (req: Request, res: Response) => {
   try {
-    // Destroy local session
+    // Destroy local session/cookies
     await sessionService.destroySession(req);
 
-    // Optional: Redirect to Cognito global logout
-    const region = process.env.COGNITO_REGION!;
-    const clientId = process.env.COGNITO_APP_CLIENT_ID!;
-    const logoutRedirectUri = process.env.OAUTH_LOGOUT_REDIRECT_URI!;
+    // Build Cognito logout URL using well-known endpoints
+    const endpoints = configService.getCognitoEndpoints();
+    const clientId = configService.get("COGNITO_APP_CLIENT_ID");
+    const logoutRedirectUri =
+      configService.get("OAUTH_LOGOUT_REDIRECT_URI") ||
+      configService.get("LOGOUT_REDIRECT_URL") ||
+      configService.get("FRONTEND_ORIGIN") ||
+      configService.get("CLIENT_URL");
 
-    const logoutUrl = `https://${process.env.COGNITO_DOMAIN}.auth.${region}.amazoncognito.com/logout?client_id=${clientId}&logout_uri=${encodeURIComponent(logoutRedirectUri)}`;
+    if (!logoutRedirectUri) {
+      throw new AppError(500, "Missing logout redirect URL configuration");
+    }
+
+    const logoutUrl = `${endpoints.logout}?client_id=${clientId}&logout_uri=${encodeURIComponent(logoutRedirectUri)}`;
 
     res.json({
       status: "success",
@@ -191,6 +244,9 @@ router.post("/logout", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Logout error:", error);
+    if (error instanceof AppError) {
+      throw error;
+    }
     throw new AppError(500, "Failed to logout");
   }
 });
@@ -290,41 +346,71 @@ router.post("/confirm-forgot-password", async (req: Request, res: Response) => {
 });
 
 /**
- * Exchange authorization code for tokens
+ * Exchange authorization code for tokens using Cognito token endpoint
  */
 async function exchangeCodeForTokens(code: string): Promise<{
   access_token: string;
   id_token: string;
   refresh_token: string;
 }> {
-  const region = process.env.COGNITO_REGION!;
-  const clientId = process.env.COGNITO_APP_CLIENT_ID!;
-  const redirectUri = process.env.OAUTH_REDIRECT_URI!;
+  const endpoints = configService.getCognitoEndpoints();
+  const clientId = configService.get("COGNITO_APP_CLIENT_ID");
+  const clientSecret = configService.get("COGNITO_APP_CLIENT_SECRET");
+  const redirectUri = configService.get("OAUTH_REDIRECT_URI");
 
-  const tokenUrl = `https://${process.env.COGNITO_DOMAIN}.auth.${region}.amazoncognito.com/oauth2/token`;
-
+  // Prepare token request parameters
   const params = new URLSearchParams({
     grant_type: "authorization_code",
     client_id: clientId,
-    code: code as string,
+    code: code,
     redirect_uri: redirectUri,
   });
 
-  const response = await fetch(tokenUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: params,
-  });
+  // Prepare headers
+  const headers: { [key: string]: string } = {
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Token exchange error:", errorText);
-    throw new AppError(400, "Failed to exchange code for tokens");
+  // Add client secret if configured (for confidential clients)
+  if (clientSecret) {
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString(
+      "base64"
+    );
+    headers["Authorization"] = `Basic ${credentials}`;
   }
 
-  return await response.json();
+  try {
+    const response = await fetch(endpoints.token, {
+      method: "POST",
+      headers,
+      body: params,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Token exchange error:", errorText);
+
+      // Provide structured error responses
+      if (response.status === 400) {
+        throw new AppError(
+          400,
+          "Invalid authorization code or redirect URI mismatch"
+        );
+      } else if (response.status === 401) {
+        throw new AppError(401, "Invalid client credentials");
+      } else {
+        throw new AppError(400, "Failed to exchange code for tokens");
+      }
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+    console.error("Network error during token exchange:", error);
+    throw new AppError(500, "Network error during authentication");
+  }
 }
 
 /**

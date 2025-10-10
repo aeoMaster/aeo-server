@@ -31,6 +31,7 @@ import {
   requestLogger,
   sanitizeErrors,
   requestId,
+  enforceHttps,
 } from "./middleware/security";
 
 // Load environment variables FIRST
@@ -38,22 +39,63 @@ dotenv.config();
 
 const app: Express = express();
 
-// Initialize configuration
-try {
-  if (configService.isCognitoAuth()) {
-    configService.validateCognitoConfig();
-    console.log("Cognito authentication enabled");
-  } else {
-    configService.validateLegacyConfig();
-    console.log("Legacy authentication enabled");
+// Test Cognito connectivity at startup
+async function testCognitoConnectivity(endpoints: any) {
+  try {
+    console.log("🔍 Testing Cognito connectivity...");
+
+    // Test JWKS endpoint
+    const jwksResponse = await fetch(endpoints.jwks, { method: "HEAD" });
+    if (!jwksResponse.ok) {
+      throw new Error(`JWKS endpoint not reachable: ${jwksResponse.status}`);
+    }
+    console.log("✅ JWKS endpoint reachable");
+
+    // Test token endpoint
+    const tokenResponse = await fetch(endpoints.token, { method: "HEAD" });
+    if (!tokenResponse.ok) {
+      throw new Error(`Token endpoint not reachable: ${tokenResponse.status}`);
+    }
+    console.log("✅ Token endpoint reachable");
+
+    console.log("✅ Cognito connectivity test passed");
+  } catch (error) {
+    console.error("⚠️  Cognito connectivity test failed:", error);
+    console.log(
+      "💡 This may be normal in development. Ensure your Cognito configuration is correct."
+    );
   }
-} catch (error) {
-  console.error("Configuration validation failed:", error);
-  process.exit(1);
 }
+
+// Initialize configuration with comprehensive validation
+(async () => {
+  try {
+    if (configService.isCognitoAuth()) {
+      configService.validateCognitoConfig();
+      console.log("✅ Cognito authentication enabled");
+
+      // Log configuration summary (non-sensitive)
+      const configSummary = configService.getConfigSummary();
+      console.log(
+        "📋 Configuration Summary:",
+        JSON.stringify(configSummary, null, 2)
+      );
+
+      // Test Cognito connectivity
+      await testCognitoConnectivity(configSummary.endpoints);
+    } else {
+      configService.validateLegacyConfig();
+      console.log("✅ Legacy authentication enabled");
+    }
+  } catch (error) {
+    console.error("❌ Configuration validation failed:", error);
+    process.exit(1);
+  }
+})();
 
 // Security middleware (order matters!)
 app.use(requestId);
+app.use(enforceHttps);
 app.use(securityHeaders);
 app.use(requestLogger);
 app.use(cors(corsOptions));

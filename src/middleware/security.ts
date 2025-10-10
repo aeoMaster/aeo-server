@@ -32,6 +32,35 @@ export const securityHeaders = helmet({
 });
 
 /**
+ * HTTPS enforcement middleware for production
+ */
+export const enforceHttps = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
+  // Only enforce HTTPS in production
+  if (process.env.NODE_ENV !== "production") {
+    return next();
+  }
+
+  // Check for HTTPS in various proxy scenarios
+  const isHttps =
+    req.secure ||
+    req.headers["x-forwarded-proto"] === "https" ||
+    req.headers["x-forwarded-ssl"] === "on";
+
+  if (!isHttps) {
+    console.warn(
+      `⚠️  Insecure request blocked: ${req.method} ${req.url} from ${req.ip}`
+    );
+    throw new AppError(400, "HTTPS required in production");
+  }
+
+  next();
+};
+
+/**
  * CSRF protection middleware
  * For state-changing operations (POST, PUT, PATCH, DELETE)
  */
