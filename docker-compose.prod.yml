@@ -157,19 +157,24 @@ services:
       - "5002:5000"
     environment:
       - NODE_ENV=production
+      - PORT=5000 - NODE_ENV=production
       - PORT=5000
       # Database (MongoDB Atlas + Cloud Redis)
       - MONGODB_URI=${MONGODB_URI}
-      - REDIS_URL=${REDIS_URL}
+      - REDIS_URL=redis://redis:6379
       # Auth Configuration
       - AUTH_PROVIDER=${AUTH_PROVIDER}
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
-      # Cognito Configuration
+      # Cognito Configuration (both naming conventions for compatibility)
       - AWS_REGION=${AWS_REGION}
+      - COGNITO_REGION=${AWS_REGION}
       - AWS_COGNITO_USER_POOL_ID=${AWS_COGNITO_USER_POOL_ID}
+      - COGNITO_USER_POOL_ID=${AWS_COGNITO_USER_POOL_ID}
       - AWS_COGNITO_CLIENT_ID=${AWS_COGNITO_CLIENT_ID}
+      - COGNITO_APP_CLIENT_ID=${AWS_COGNITO_CLIENT_ID}
       - AWS_COGNITO_DOMAIN=${AWS_COGNITO_DOMAIN}
+      - COGNITO_DOMAIN=${AWS_COGNITO_DOMAIN}
       - OAUTH_REDIRECT_URI=${OAUTH_REDIRECT_URI}
       - OAUTH_LOGOUT_REDIRECT_URI=${OAUTH_LOGOUT_REDIRECT_URI}
       - SESSION_SECRET=${SESSION_SECRET}
@@ -183,8 +188,8 @@ services:
       - LINKEDIN_CLIENT_SECRET=${LINKEDIN_CLIENT_SECRET}
       - LINKEDIN_REDIRECT_URI=${LINKEDIN_REDIRECT_URI}
       # Frontend URLs
-      - CLIENT_URL=${CLIENT_URL}
-      - FRONTEND_URL=${FRONTEND_URL}
+      - CLIENT_URL=${CLIENT_URL:-http://localhost:3000}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
       # API Keys
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       # - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
