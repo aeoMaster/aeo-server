@@ -415,6 +415,8 @@ async function exchangeCodeForTokens(code: string): Promise<{
 
 /**
  * Upsert user in MongoDB
+ * For new users: Creates user AND subscription atomically (fails if subscription fails)
+ * For existing users: Updates user info and refreshes subscription if needed
  */
 async function upsertUser(
   userInfo: {
@@ -434,6 +436,7 @@ async function upsertUser(
 
     if (user) {
       // Update existing user
+      console.log(`Updating existing user: ${user._id}`);
       user.cognitoSub = userInfo.cognitoSub;
       user.email = userInfo.email;
       user.name = userInfo.name || user.name;
@@ -445,8 +448,11 @@ async function upsertUser(
       user.role = (roles[0] as "owner" | "admin" | "user" | "viewer") || "user";
 
       await user.save();
+      console.log(`Successfully updated user: ${user._id}`);
     } else {
       // Create new user
+      console.log(`Creating new user for Cognito sub: ${userInfo.cognitoSub}`);
+
       user = await User.create({
         cognitoSub: userInfo.cognitoSub,
         email: userInfo.email,
@@ -457,24 +463,39 @@ async function upsertUser(
         status: "active",
         lastLogin: new Date(),
       });
+      console.log(`Successfully created user: ${user._id}`);
 
       // Create free tier subscription for new users
+      // This is CRITICAL - if this fails, we delete the user and fail the login
+      // This matches the behavior of traditional signup (see auth.ts lines 50-61)
       try {
+        console.log(`Creating free tier subscription for user: ${user._id}`);
         await SubscriptionService.createFreeTierSubscription(
           user._id.toString()
         );
+        console.log(`Successfully created subscription for user: ${user._id}`);
       } catch (subscriptionError) {
         console.error(
-          "Error creating subscription for new user:",
+          "CRITICAL: Failed to create subscription for new user:",
           subscriptionError
         );
-        // Don't fail the login if subscription creation fails
+        // Delete the user if subscription creation fails
+        // This ensures data consistency - no users without subscriptions
+        console.log(`Rolling back user creation: ${user._id}`);
+        await User.findByIdAndDelete(user._id);
+        throw new AppError(
+          500,
+          "Failed to create user subscription. Please try again."
+        );
       }
     }
 
     return user;
   } catch (error) {
     console.error("Error upserting user:", error);
+    if (error instanceof AppError) {
+      throw error;
+    }
     throw new AppError(500, "Failed to create or update user");
   }
 }
