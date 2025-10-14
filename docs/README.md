@@ -12,6 +12,7 @@ Welcome to the AEO Server documentation. This folder contains all technical docu
 - **[QUICK_FIX.md](./troubleshooting/QUICK_FIX.md)** - Fast recovery commands for common issues
 - **[RECOVERY_GUIDE.md](./troubleshooting/RECOVERY_GUIDE.md)** - Comprehensive troubleshooting guide
 - **[DEPLOYMENT_FIX_SUMMARY.md](./troubleshooting/DEPLOYMENT_FIX_SUMMARY.md)** - Latest deployment fixes explained
+- **[GITHUB_ACTIONS_PERMISSION_ERRORS.md](./troubleshooting/GITHUB_ACTIONS_PERMISSION_ERRORS.md)** - CI/CD permission issues
 
 ---
 

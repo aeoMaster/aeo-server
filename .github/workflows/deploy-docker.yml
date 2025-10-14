@@ -10,6 +10,13 @@ jobs:
       - prod
 
     steps:
+      - name: Fix permissions before checkout
+        run: |
+          # Fix ownership of directories that Docker might have created with root permissions
+          sudo chown -R $USER:$USER . 2>/dev/null || true
+
+          echo "✅ Permissions fixed"
+
       - name: Checkout source code
         uses: actions/checkout@v4
 
