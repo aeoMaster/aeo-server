@@ -213,7 +213,8 @@ services:
       - AWS_REGION=${AWS_REGION:-us-east-1}
 
     networks:
-      - aeo-network
+      aeo-network:
+        aliases: ["api"]
     healthcheck:
       test:
         [
@@ -312,3 +313,4 @@ networks:
 #     return 404; # managed by Certbot
 
 # }
+
