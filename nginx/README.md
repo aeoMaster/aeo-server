@@ -1,59 +1,141 @@
-# Nginx Configuration
+# Nginx Configuration (Native - Not Docker)
 
-This directory contains nginx configuration files for the AEO server.
+This directory contains nginx configuration template for the AEO server.
+
+⚠️ **Important**: Nginx runs **natively on EC2**, NOT in Docker!
 
 ## Files
 
-- **conf.d/default.conf** - Default HTTP-only configuration for local/testing
-- **conf.d/server-api.conf.example** - Production SSL configuration template
+- **conf.d/server-api-native.conf** - Production nginx configuration template
 
-## Local Development
+## Production Setup (EC2)
 
-The `default.conf` is used automatically when running docker-compose. It provides basic HTTP proxy to the api containers.
+### Install/Setup Native Nginx
 
-## Production Deployment (EC2)
+```bash
+# On EC2 server
+sudo yum install -y nginx  # Amazon Linux
+# or
+sudo apt install -y nginx  # Ubuntu
 
-On your EC2 server, the nginx configuration is located at:
+# Enable nginx
+sudo systemctl enable nginx
+sudo systemctl start nginx
+```
+
+### Deploy Nginx Configuration
+
+```bash
+# Copy the config to nginx sites
+sudo cp nginx/conf.d/server-api-native.conf /etc/nginx/sites-available/server-api
+
+# Create symlink to enable it
+sudo ln -sf /etc/nginx/sites-available/server-api /etc/nginx/sites-enabled/server-api
+
+# Remove default config if present
+sudo rm -f /etc/nginx/sites-enabled/default
+
+# Test configuration
+sudo nginx -t
+
+# Reload nginx
+sudo systemctl reload nginx
+```
+
+## Configuration Details
+
+The nginx config proxies to Docker containers exposed on **host ports**:
+
+- **Blue container**: `localhost:5001` → container port 5000
+- **Green container**: `localhost:5002` → container port 5000
+
+### Upstream Configuration
+
+```nginx
+upstream api_upstream {
+    server localhost:5001 max_fails=3 fail_timeout=30s;
+    server localhost:5002 max_fails=3 fail_timeout=30s;
+    keepalive 32;
+}
+```
+
+This provides:
+
+- ✅ Load balancing between blue/green deployments
+- ✅ Automatic failover if one container is down
+- ✅ Health checks with max_fails
+- ✅ Connection pooling with keepalive
+
+## SSL/HTTPS Setup
+
+The config expects SSL certificates from Let's Encrypt:
 
 ```
-/home/ubuntu/actions-runner/_work/aeo-server/aeo-server/nginx/conf.d/
+/etc/letsencrypt/live/server-api.themoda.io/fullchain.pem
+/etc/letsencrypt/live/server-api.themoda.io/privkey.pem
 ```
 
-### Current Production Config
+To set up SSL:
 
-The production server uses `server-api.conf` (not tracked in git for security) with:
+```bash
+# Install certbot
+sudo yum install -y certbot python3-certbot-nginx
 
-- HTTP to HTTPS redirect
-- SSL certificates from Let's Encrypt
-- Domain: `server-api.themoda.io`
-
-To update production config:
-
-1. SSH to EC2
-2. Edit `/home/ubuntu/actions-runner/_work/aeo-server/aeo-server/nginx/conf.d/server-api.conf`
-3. Restart nginx: `docker-compose -f docker-compose.prod.yml restart nginx`
-
-## Important Notes
-
-- The upstream `api_upstream` uses DNS resolver `127.0.0.11` (Docker's internal DNS)
-- Both blue and green containers must have the `api` network alias
-- The `resolve` directive allows nginx to pick up new container IPs dynamically
-- Keep SSL certificates in `/etc/letsencrypt/` (mounted as read-only volume)
+# Get certificate
+sudo certbot --nginx -d server-api.themoda.io
+```
 
 ## Troubleshooting
 
-If nginx can't reach the api containers:
+### Check Nginx Status
 
 ```bash
-# Check nginx can resolve the api hostname
-docker exec aeo-nginx nslookup api
-
-# Check nginx can reach the api
-docker exec aeo-nginx wget -qO- http://api:5000/health
-
-# Check nginx logs
-docker logs aeo-nginx --tail 50
-
-# Restart nginx
-docker-compose -f docker-compose.prod.yml restart nginx
+sudo systemctl status nginx
+sudo nginx -t  # Test configuration
 ```
+
+### Check Logs
+
+```bash
+sudo tail -f /var/log/nginx/access.log
+sudo tail -f /var/log/nginx/error.log
+```
+
+### Test Backend Connectivity
+
+```bash
+# Test containers directly
+curl http://localhost:5001/health
+curl http://localhost:5002/health
+
+# Test through nginx
+curl http://localhost/health
+curl https://server-api.themoda.io/health
+```
+
+### Reload After Config Changes
+
+```bash
+sudo systemctl reload nginx
+# or
+sudo nginx -s reload
+```
+
+## Architecture
+
+```
+Internet (80/443)
+    ↓
+Native Nginx (EC2)
+    ↓
+localhost:5001 ← Blue Container (Docker)
+localhost:5002 ← Green Container (Docker)
+```
+
+## Notes
+
+- Nginx runs on the **EC2 host** (not in Docker)
+- Docker containers expose ports to the host
+- Nginx load balances between both containers
+- During deployment, both containers can run simultaneously
+- Nginx automatically routes to healthy containers only

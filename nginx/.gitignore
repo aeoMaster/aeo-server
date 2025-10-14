@@ -1,4 +1,3 @@
-# Ignore production-specific nginx configs
-# Keep only examples and default configs in git
-conf.d/server-api.conf
+# All nginx configs are deployed directly to /etc/nginx/sites-available/
+# Nothing to ignore - only keep the native template
 

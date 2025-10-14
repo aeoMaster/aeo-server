@@ -143,10 +143,6 @@ jobs:
             echo "deploy_color=blue" >> $GITHUB_OUTPUT
           fi
 
-      - name: Start Nginx load balancer
-        run: |
-          docker-compose -f docker-compose.prod.yml up -d nginx
-
       - name: Deploy to ${{ steps.check_color.outputs.deploy_color }} environment
         run: |
           # Deploy new version to inactive color
@@ -161,11 +157,6 @@ jobs:
           echo ""
           echo "=== Container logs (first 30 lines) ==="
           docker logs aeo-server-${{ steps.check_color.outputs.deploy_color }} --tail 30 || true
-
-          echo ""
-          echo "=== Nginx Status ==="
-          docker ps | grep nginx || echo "Nginx not running"
-          docker logs aeo-nginx --tail 20 || echo "No nginx logs"
 
       - name: Wait for new deployment to be healthy
         run: |
@@ -185,12 +176,12 @@ jobs:
             fi
           done
 
-      - name: Restart Nginx to connect to new deployment
+      - name: Reload native Nginx
         run: |
-          echo "Restarting nginx to connect to new deployment..."
-          docker-compose -f docker-compose.prod.yml restart nginx
-          sleep 5
-          echo "Nginx restarted"
+          echo "Reloading native nginx..."
+          sudo systemctl reload nginx || echo "⚠️ Nginx reload failed"
+          sleep 2
+          echo "Nginx reloaded"
 
       - name: Gracefully stop old deployment
         if: success()
@@ -212,18 +203,27 @@ jobs:
 
           echo ""
           echo "=== Health Check (Inside Container) ==="
-          # Check the app container from inside (since ports are not exposed to host)
+          # Check the app container from inside
           docker exec aeo-server-${{ steps.check_color.outputs.deploy_color }} node -e "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" || exit 1
 
           echo ""
-          echo "=== Health Check (Nginx Proxy - HTTP) ==="
-          # Check through nginx on port 80
+          echo "=== Health Check (Container Direct Port) ==="
+          # Check container on exposed host port
+          if [ "${{ steps.check_color.outputs.deploy_color }}" = "blue" ]; then
+            curl -f http://localhost:5001/health || exit 1
+          else
+            curl -f http://localhost:5002/health || exit 1
+          fi
+
+          echo ""
+          echo "=== Health Check (Native Nginx - HTTP) ==="
+          # Check through native nginx
           curl -f http://localhost:80/health || echo "⚠️ HTTP health check failed"
 
           echo ""
-          echo "=== Health Check (Nginx Proxy - HTTPS) ==="
-          # Check through nginx on port 443 (if SSL is configured)
-          curl -f -k https://localhost:443/health || echo "⚠️ HTTPS not configured yet or health check failed"
+          echo "=== Health Check (Native Nginx - HTTPS) ==="
+          # Check through native nginx with SSL
+          curl -f -k https://localhost:443/health || echo "⚠️ HTTPS health check failed"
 
           echo ""
           echo "=== Recent Logs ==="
