@@ -60,12 +60,13 @@ sleep 5
 ### Step 5: Verify Health
 
 ```bash
-# Test direct container access
-curl http://localhost:5001/health  # Blue container
-curl http://localhost:5002/health  # Green container
+# Test containers from inside (ports are not exposed to host)
+docker exec aeo-server-blue node -e "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+docker exec aeo-server-green node -e "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Test through nginx proxy
-curl http://localhost:5000/health
+curl http://localhost:80/health          # HTTP
+curl -k https://localhost:443/health     # HTTPS
 ```
 
 ### Step 6: Check Logs Again
@@ -139,8 +140,9 @@ docker-compose -f docker-compose.prod.yml logs -f
 
 - [ ] Both app containers are running (`docker ps`)
 - [ ] Nginx container is running and healthy
-- [ ] Direct health checks work (ports 5001, 5002)
-- [ ] Nginx proxy health check works (port 5000)
+- [ ] Containers respond to internal health checks (`docker exec`)
+- [ ] Nginx proxy health check works (ports 80/443)
+- [ ] Containers have the `api` network alias
 - [ ] No error logs in app containers
 - [ ] No "Host unreachable" errors in nginx logs
 

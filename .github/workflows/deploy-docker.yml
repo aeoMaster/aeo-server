@@ -204,18 +204,19 @@ jobs:
           docker-compose -f docker-compose.prod.yml ps
 
           echo ""
-          echo "=== Health Check (Direct Container) ==="
-          # Check the app container directly on its exposed port
-          if [ "${{ steps.check_color.outputs.deploy_color }}" = "blue" ]; then
-            curl -f http://localhost:5001/health || exit 1
-          else
-            curl -f http://localhost:5002/health || exit 1
-          fi
+          echo "=== Health Check (Inside Container) ==="
+          # Check the app container from inside (since ports are not exposed to host)
+          docker exec aeo-server-${{ steps.check_color.outputs.deploy_color }} node -e "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" || exit 1
 
           echo ""
-          echo "=== Health Check (Nginx Proxy) ==="
-          # Also check through nginx if it's working
-          curl -f http://localhost:5000/health || echo "⚠️ Nginx proxy not working, but direct access works"
+          echo "=== Health Check (Nginx Proxy - HTTP) ==="
+          # Check through nginx on port 80
+          curl -f http://localhost:80/health || echo "⚠️ HTTP health check failed"
+
+          echo ""
+          echo "=== Health Check (Nginx Proxy - HTTPS) ==="
+          # Check through nginx on port 443 (if SSL is configured)
+          curl -f -k https://localhost:443/health || echo "⚠️ HTTPS not configured yet or health check failed"
 
           echo ""
           echo "=== Recent Logs ==="

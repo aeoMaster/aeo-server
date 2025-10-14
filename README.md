@@ -86,6 +86,25 @@ Create a `.env` file in the root directory with the following variables:
 - Error handling middleware
 - CORS configuration
 
+## 📚 Documentation
+
+Comprehensive documentation is available in the [`docs/`](./docs) folder:
+
+- **🚨 [Troubleshooting](./docs/troubleshooting)** - Server issues and recovery guides
+- **🚀 [Deployment](./docs/deployment)** - Deployment and Docker guides
+- **⚙️ [Setup](./docs/setup)** - AWS and environment configuration
+- **🔐 [Cognito](./docs/cognito)** - Authentication implementation
+- **✨ [Features](./docs/features)** - API reference and features
+
+📖 **[Browse All Documentation](./docs/README.md)**
+
+### Quick Links
+
+- [🆘 Server Down?](./docs/troubleshooting/SERVER_DOWN_CHECKLIST.md) - Start here for issues
+- [🐳 Docker Deployment](./docs/deployment/DOCKER_DEPLOYMENT.md) - Deploy with Docker
+- [📡 API Reference](./docs/features/API_ENDPOINTS_REFERENCE.md) - Complete API docs
+- [🔧 Nginx Configuration](./nginx/README.md) - Nginx setup
+
 ## License
 
-MIT 
+MIT

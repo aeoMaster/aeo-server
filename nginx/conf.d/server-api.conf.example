@@ -1,0 +1,49 @@
+# nginx/conf.d/server-api.conf.example
+# Production configuration with SSL (for EC2 deployment)
+# Copy this to server-api.conf on EC2 and configure SSL certificates
+
+resolver 127.0.0.11 ipv6=off valid=30s;
+
+upstream api_upstream {
+    zone api_zone 64k;
+    server api:5000 resolve;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name server-api.themoda.io;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name server-api.themoda.io;
+
+    ssl_certificate     /etc/letsencrypt/live/server-api.themoda.io/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/server-api.themoda.io/privkey.pem;
+    include             /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
+
+    proxy_connect_timeout 3s;
+    proxy_send_timeout    60s;
+    proxy_read_timeout    60s;
+
+    # If a target fails mid-flight, retry on the next one
+    proxy_next_upstream error timeout http_502 http_503 http_504;
+
+    location / {
+        proxy_pass http://api_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /health {
+        proxy_pass http://api_upstream/health;
+        access_log off;
+    }
+}
+

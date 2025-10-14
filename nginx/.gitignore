@@ -1,0 +1,4 @@
+# Ignore production-specific nginx configs
+# Keep only examples and default configs in git
+conf.d/server-api.conf
+
