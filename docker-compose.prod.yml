@@ -73,8 +73,8 @@ services:
       target: production
     container_name: aeo-server-blue
     restart: always
-    # ports:
-    #   - "5001:5000"
+    ports:
+      - "5000"
     expose:
       - "5000"
     environment:
@@ -158,8 +158,8 @@ services:
       target: production
     container_name: aeo-server-green
     restart: always
-    # ports:
-    #   - "5002:5000"
+    ports:
+      - "5000"
     expose:
       - "5000"
     environment:
