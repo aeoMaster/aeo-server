@@ -213,8 +213,7 @@ services:
       - AWS_REGION=${AWS_REGION:-us-east-1}
 
     networks:
-      aeo-network:
-        aliases: ["api"]
+      - aeo-network
     healthcheck:
       test:
         [
