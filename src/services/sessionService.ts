@@ -17,6 +17,7 @@ export interface ISessionData {
 // MongoDB Session Store
 class MongoSessionStore extends session.Store {
   constructor() {
+    console.log("🗄️ MongoSessionStore constructor called");
     super();
     console.log("🗄️ MongoSessionStore constructor called");
   }
