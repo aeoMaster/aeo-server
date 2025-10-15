@@ -1,6 +1,4 @@
 import session from "express-session";
-import RedisStore from "connect-redis";
-import { createClient } from "redis";
 import { v4 as uuidv4 } from "uuid";
 
 export interface ISessionData {
@@ -33,41 +31,8 @@ class SessionService {
   }
 
   private async initializeStore(): Promise<void> {
-    const redisUrl = process.env.REDIS_URL || "redis://redis:6379";
-
-    if (redisUrl && process.env.NODE_ENV !== "development") {
-      // Use Redis in production/staging
-      try {
-        this.redisClient = createClient({
-          url: redisUrl,
-          socket: {
-            reconnectStrategy: (retries) => Math.min(retries * 50, 500),
-          },
-        });
-
-        this.redisClient.on("error", (err: Error) => {
-          console.error("Redis Client Error:", err);
-        });
-
-        await this.redisClient.connect();
-
-        this.store = new (RedisStore as any)({
-          client: this.redisClient,
-          prefix: "aeo:session:",
-        });
-
-        console.log("Session store initialized with Redis");
-      } catch (error) {
-        console.error(
-          "Failed to initialize Redis store, falling back to memory store:",
-          error
-        );
-        this.initializeMemoryStore();
-      }
-    } else {
-      // Use memory store in development
-      this.initializeMemoryStore();
-    }
+    // Use memory store for sessions - OAuth state is handled separately by oauthStateService
+    this.initializeMemoryStore();
   }
 
   private initializeMemoryStore(): void {
