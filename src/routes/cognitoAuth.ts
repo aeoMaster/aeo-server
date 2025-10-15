@@ -1,9 +1,9 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import { AppError } from "../middleware/errorHandler";
 import { jwtValidationService } from "../services/jwtValidationService";
-import { sessionService } from "../services/sessionService";
 import { roleMappingService } from "../services/roleMappingService";
 import { cognitoService } from "../services/cognitoService";
 import { configService } from "../services/configService";
@@ -147,6 +147,11 @@ router.get("/callback", async (req: Request, res: Response) => {
   try {
     const { code, state, error, error_description } = req.query;
 
+    console.log("code", code);
+    console.log("state", state);
+    console.log("error", error);
+    console.log("error_description", error_description);
+
     // Handle OAuth errors with structured responses
     if (error) {
       console.error("OAuth error:", error, error_description);
@@ -171,40 +176,53 @@ router.get("/callback", async (req: Request, res: Response) => {
 
     // Exchange code for tokens
     const tokens = await exchangeCodeForTokens(code as string);
+    console.log("tokens", tokens);
 
     // Verify ID token signature via JWKS
     const idToken = await jwtValidationService.verifyIdToken(tokens.id_token);
-
+    console.log("idToken", idToken);
     // Extract user information from ID token
     const userInfo = jwtValidationService.extractUserInfo(idToken);
-
+    console.log("userInfo", userInfo);
     // Map Cognito groups to application roles
     const userRoles = roleMappingService.mapGroupsToRoles(userInfo.groups);
+    console.log("userRoles", userRoles);
 
     // Upsert user in database (idempotent operation)
-    await upsertUser(userInfo, userRoles.roles);
+    // This handles both signup (creates user + subscription) and login (updates user info)
+    const user = await upsertUser(userInfo, userRoles.roles);
 
-    // Create secure server session
-    await sessionService.createSession(req, {
-      cognitoSub: userInfo.cognitoSub,
-      email: userInfo.email,
-      name: userInfo.name,
-      roles: userRoles.roles,
-      groups: userInfo.groups,
+    // Generate JWT token (matching traditional auth behavior)
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET as string, {
+      expiresIn: "7d",
     });
 
-    // Redirect to frontend success page
+    // Redirect to frontend with token
+    // Frontend will extract token from URL and store it (localStorage/sessionStorage)
     const frontendUrl =
       configService.get("FRONTEND_ORIGIN") ||
       configService.get("CLIENT_URL") ||
-      "http://localhost:3000";
-    res.redirect(`${frontendUrl}/dashboard`);
+      "https://www.themoda.io";
+    console.log("frontendUrl", frontendUrl);
+    console.log("Generated JWT token for user:", user._id);
+
+    // Redirect to auth callback page with token
+    res.redirect(
+      `${frontendUrl}/auth/callback?token=${token}&user=${encodeURIComponent(
+        JSON.stringify({
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          roles: userRoles.roles,
+        })
+      )}`
+    );
   } catch (error) {
     console.error("Callback error:", error);
     const frontendUrl =
       configService.get("FRONTEND_ORIGIN") ||
       configService.get("CLIENT_URL") ||
-      "http://localhost:3000";
+      "https://www.themoda.io";
     const errorMessage =
       error instanceof Error ? error.message : "Authentication failed";
     res.redirect(
@@ -215,13 +233,10 @@ router.get("/callback", async (req: Request, res: Response) => {
 
 /**
  * POST /api/auth/logout
- * Invalidates server session and returns Cognito logout URL
+ * Returns Cognito logout URL (JWT is stateless, so just clear on client side)
  */
-router.post("/logout", async (req: Request, res: Response) => {
+router.post("/logout", async (_req: Request, res: Response) => {
   try {
-    // Destroy local session/cookies
-    await sessionService.destroySession(req);
-
     // Build Cognito logout URL using well-known endpoints
     const endpoints = configService.getCognitoEndpoints();
     const clientId = configService.get("COGNITO_APP_CLIENT_ID");
@@ -239,7 +254,8 @@ router.post("/logout", async (req: Request, res: Response) => {
 
     res.json({
       status: "success",
-      message: "Logged out successfully",
+      message:
+        "Logged out successfully. Please clear your JWT token on the client side.",
       logoutUrl,
     });
   } catch (error) {
@@ -253,29 +269,48 @@ router.post("/logout", async (req: Request, res: Response) => {
 
 /**
  * GET /auth/me
- * Returns current user information
+ * Returns current user information from JWT token
  */
-router.get("/me", (req: Request, res: Response) => {
-  try {
-    const sessionData = sessionService.getSessionData(req);
-
-    if (!sessionData) {
-      throw new AppError(401, "Not authenticated");
-    }
-
-    res.json({
-      status: "success",
-      user: {
-        id: sessionData.cognitoSub,
-        email: sessionData.email,
-        name: sessionData.name,
-        roles: sessionData.roles,
-        groups: sessionData.groups,
-      },
-    });
-  } catch (error) {
-    console.error("Get user error:", error);
+router.get("/me", (req: Request, res: Response, next: NextFunction) => {
+  // Use JWT authentication
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
     throw new AppError(401, "Not authenticated");
+  }
+
+  const token = authHeader.substring(7);
+
+  try {
+    // Verify JWT token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
+      id: string;
+    };
+
+    // Get user from database
+    User.findById(decoded.id)
+      .then((user) => {
+        if (!user || user.status !== "active") {
+          throw new AppError(401, "User not found or inactive");
+        }
+
+        res.json({
+          status: "success",
+          user: {
+            id: user._id,
+            email: user.email,
+            name: user.name,
+            roles: user.roles || [user.role],
+            groups: user.cognitoGroups || [],
+          },
+        });
+      })
+      .catch((error) => {
+        console.error("Get user error:", error);
+        next(new AppError(401, "Not authenticated"));
+      });
+  } catch (error) {
+    console.error("JWT verification error:", error);
+    throw new AppError(401, "Invalid token");
   }
 });
 

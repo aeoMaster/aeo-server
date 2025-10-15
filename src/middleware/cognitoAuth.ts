@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
+import passport from "passport";
 import { AppError } from "./errorHandler";
-import { sessionService } from "../services/sessionService";
 import { roleMappingService } from "../services/roleMappingService";
 import { User } from "../models/User";
 
@@ -21,46 +21,48 @@ declare global {
 
 /**
  * Require authentication middleware for Cognito
+ * Now uses JWT tokens (same as traditional auth) for consistency
  */
-export const requireAuth = async (
+export const requireAuth = (
   req: Request,
-  _res: Response,
+  res: Response,
   next: NextFunction
-): Promise<void> => {
-  try {
-    // Check if user has a valid session
-    if (!sessionService.isAuthenticated(req)) {
-      throw new AppError(401, "Authentication required");
+): void => {
+  console.log("=== Cognito Authentication Debug ===");
+  console.log("Authorization header:", req.headers.authorization);
+  console.log("====================================");
+
+  passport.authenticate(
+    "jwt",
+    { session: false },
+    async (err: Error, user: any) => {
+      if (err || !user) {
+        console.log("Authentication failed:", err?.message || "No user found");
+        return next(new AppError(401, "Unauthorized"));
+      }
+
+      console.log("Authentication successful for user:", user._id);
+
+      // Verify user is active
+      if (user.status !== "active") {
+        return next(new AppError(401, "User account is not active"));
+      }
+
+      // Attach user to request
+      req.user = user;
+
+      // Also attach cognitoUser for backward compatibility
+      req.cognitoUser = {
+        cognitoSub: user.cognitoSub || "",
+        email: user.email,
+        name: user.name,
+        roles: user.roles || [user.role],
+        groups: user.cognitoGroups || [],
+      };
+
+      next();
     }
-
-    const sessionData = sessionService.getSessionData(req);
-    if (!sessionData) {
-      throw new AppError(401, "Invalid session");
-    }
-
-    // Load user from database to get latest data
-    const user = await User.findOne({ cognitoSub: sessionData.cognitoSub });
-    if (!user || user.status !== "active") {
-      throw new AppError(401, "User not found or inactive");
-    }
-
-    // Attach user data to request
-    req.cognitoUser = {
-      cognitoSub: sessionData.cognitoSub,
-      email: sessionData.email,
-      name: sessionData.name,
-      roles: sessionData.roles,
-      groups: sessionData.groups,
-    };
-
-    // Also attach full user object for backward compatibility
-    req.user = user as any;
-
-    next();
-  } catch (error) {
-    console.error("Authentication error:", error);
-    next(error);
-  }
+  )(req, res, next);
 };
 
 /**
@@ -157,34 +159,36 @@ export const requirePermission = (requiredPermission: string) => {
 /**
  * Optional authentication middleware
  * Attaches user data if available, but doesn't require it
+ * Now uses JWT tokens for consistency
  */
-export const optionalAuth = async (
+export const optionalAuth = (
   req: Request,
-  _res: Response,
+  res: Response,
   next: NextFunction
-): Promise<void> => {
-  try {
-    if (sessionService.isAuthenticated(req)) {
-      const sessionData = sessionService.getSessionData(req);
-      if (sessionData) {
-        const user = await User.findOne({ cognitoSub: sessionData.cognitoSub });
-        if (user && user.status === "active") {
-          req.cognitoUser = {
-            cognitoSub: sessionData.cognitoSub,
-            email: sessionData.email,
-            name: sessionData.name,
-            roles: sessionData.roles,
-            groups: sessionData.groups,
-          };
-          req.user = user as any;
-        }
-      }
-    }
-    next();
-  } catch (error) {
-    // Don't throw error for optional auth, just continue without user data
-    next();
+): void => {
+  // Only try to authenticate if Authorization header is present
+  if (!req.headers.authorization) {
+    return next();
   }
+
+  passport.authenticate(
+    "jwt",
+    { session: false },
+    async (err: Error, user: any) => {
+      if (!err && user && user.status === "active") {
+        req.user = user;
+        req.cognitoUser = {
+          cognitoSub: user.cognitoSub || "",
+          email: user.email,
+          name: user.name,
+          roles: user.roles || [user.role],
+          groups: user.cognitoGroups || [],
+        };
+      }
+      // Continue regardless of auth success/failure
+      next();
+    }
+  )(req, res, next);
 };
 
 /**
