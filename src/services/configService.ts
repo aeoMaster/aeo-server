@@ -237,10 +237,16 @@ class ConfigService {
     const region = this.config.COGNITO_REGION;
     const userPoolId = this.config.COGNITO_USER_POOL_ID;
 
+    // Handle both cases: domain with or without https:// prefix
+    let cleanDomain = domain;
+    if (domain.startsWith("https://")) {
+      cleanDomain = domain.replace("https://", "");
+    }
+
     return {
-      authorization: `https://${domain}.auth.${region}.amazoncognito.com/login`,
-      token: `https://${domain}.auth.${region}.amazoncognito.com/oauth2/token`,
-      logout: `https://${domain}.auth.${region}.amazoncognito.com/logout`,
+      authorization: `https://${cleanDomain}/login`,
+      token: `https://${cleanDomain}/oauth2/token`,
+      logout: `https://${cleanDomain}/logout`,
       jwks: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`,
     };
   }

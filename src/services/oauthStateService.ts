@@ -122,7 +122,10 @@ class MongoOAuthStateService implements IOAuthStateService {
 
   async getState(state: string): Promise<IStateData | undefined> {
     const key = `state:${state}`;
-    console.log(`🔍 [MongoDB] Getting state: ${state.substring(0, 8)}...`);
+    console.log(
+      `🔍 [MongoDB] Getting state: ${state.substring(0, 8)}... (full length: ${state.length})`
+    );
+    console.log(`🔍 [MongoDB] Looking for key: ${key}`);
     const result = await this.getStateData(key);
     console.log(
       `🔍 [MongoDB] State ${state.substring(0, 8)}... ${result ? "FOUND" : "NOT FOUND"}`
@@ -130,6 +133,10 @@ class MongoOAuthStateService implements IOAuthStateService {
     if (result) {
       console.log(
         `🔍 [MongoDB] State expires: ${new Date(result.expiresAt).toISOString()}, now: ${new Date().toISOString()}`
+      );
+    } else {
+      console.log(
+        `🔍 [MongoDB] State not found - checking if expired or missing`
       );
     }
     return result;
