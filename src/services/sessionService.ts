@@ -17,7 +17,6 @@ export interface ISessionData {
 // MongoDB Session Store
 class MongoSessionStore extends session.Store {
   constructor() {
-    console.log("🗄️ MongoSessionStore constructor called");
     super();
     console.log("🗄️ MongoSessionStore constructor called");
   }
@@ -87,27 +86,11 @@ class SessionService {
     this.initializeStore();
   }
 
-  private async initializeStore(): Promise<void> {
-    // Use MongoDB session store for all environments
-    try {
-      console.log("🗄️ Initializing MongoDB session store...");
-      this.store = new MongoSessionStore();
-      console.log("🗄️ Session store initialized with MongoDB");
-    } catch (error) {
-      console.error(
-        "Failed to initialize MongoDB session store, falling back to memory store:",
-        error
-      );
-      this.initializeMemoryStore();
-    }
-  }
-
-  private initializeMemoryStore(): void {
-    const MemoryStore = require("memorystore")(session);
-    this.store = new MemoryStore({
-      checkPeriod: 86400000, // prune expired entries every 24h
-    });
-    console.log("Session store initialized with memory store");
+  private initializeStore(): void {
+    // Use MongoDB session store for all environments - NO FALLBACK
+    console.log("🗄️ Initializing MongoDB session store...");
+    this.store = new MongoSessionStore();
+    console.log("🗄️ Session store initialized with MongoDB");
   }
 
   /**
