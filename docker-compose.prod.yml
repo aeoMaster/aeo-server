@@ -38,30 +38,8 @@ services:
   #       max-file: "3"
 
   # ---------------------------------------------------------------------------
-  # Redis Cache (Production)
+  # Redis removed - using MongoDB for OAuth state and sessions
   # ---------------------------------------------------------------------------
-  redis:
-    image: redis:7-alpine
-    container_name: aeo-redis-prod
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - aeo-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   # ---------------------------------------------------------------------------
   # Node.js Application - Blue Instance
@@ -78,9 +56,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5000
-      # Database (MongoDB Atlas + Redis)
-      - MONGODB_URI=${MONGODB_URI}
-      - REDIS_URL=redis://aeo-redis-prod:6379/0
+      # Database (MongoDB Atlas)
+      - MONGODB_URI=${MONGODB_URI}/0
       # Auth Configuration
       - AUTH_PROVIDER=${AUTH_PROVIDER}
       - JWT_SECRET=${JWT_SECRET}
@@ -161,9 +138,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5000
-      # Database (MongoDB Atlas + Redis)
+      # Database (MongoDB Atlas)
       - MONGODB_URI=${MONGODB_URI}
-      - REDIS_URL=redis://aeo-redis-prod:6379
       # Auth Configuration
       - AUTH_PROVIDER=${AUTH_PROVIDER}
       - JWT_SECRET=${JWT_SECRET}
@@ -236,8 +212,5 @@ networks:
   aeo-network:
     driver: bridge
 # =============================================================================
-# Volumes (Redis needed for OAuth state management)
+# Volumes (Not needed - using MongoDB Atlas for all storage)
 # =============================================================================
-volumes:
-  redis_data:
-    driver: local

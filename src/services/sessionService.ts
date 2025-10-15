@@ -1,7 +1,6 @@
 import session from "express-session";
-import { RedisStore } from "connect-redis";
-import { createClient } from "redis";
 import { v4 as uuidv4 } from "uuid";
+import { Session } from "../models";
 
 export interface ISessionData {
   sessionId: string;
@@ -15,8 +14,55 @@ export interface ISessionData {
   lastAccessedAt: Date;
 }
 
+// MongoDB Session Store
+class MongoSessionStore extends session.Store {
+  async get(
+    sessionId: string,
+    callback: (err: any, session?: session.SessionData | null) => void
+  ) {
+    try {
+      const doc = await Session.findById(sessionId);
+      if (doc) {
+        callback(null, doc.session);
+      } else {
+        callback(null, null);
+      }
+    } catch (error) {
+      callback(error);
+    }
+  }
+
+  async set(
+    sessionId: string,
+    session: session.SessionData,
+    callback?: (err?: any) => void
+  ) {
+    try {
+      await Session.findByIdAndUpdate(
+        sessionId,
+        {
+          session,
+          expires: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8 hours
+        },
+        { upsert: true }
+      );
+      callback?.();
+    } catch (error) {
+      callback?.(error);
+    }
+  }
+
+  async destroy(sessionId: string, callback?: (err?: any) => void) {
+    try {
+      await Session.findByIdAndDelete(sessionId);
+      callback?.();
+    } catch (error) {
+      callback?.(error);
+    }
+  }
+}
+
 class SessionService {
-  private redisClient?: any;
   private store!: session.Store;
   private sessionSecret: string;
   private sessionTtl: number;
@@ -33,40 +79,15 @@ class SessionService {
   }
 
   private async initializeStore(): Promise<void> {
-    const redisUrl = process.env.REDIS_URL || "redis://aeo-redis-prod:6379";
-
-    if (redisUrl && process.env.NODE_ENV === "production") {
-      // Use Redis in production
-      try {
-        this.redisClient = createClient({
-          url: redisUrl,
-          socket: {
-            reconnectStrategy: (retries) => Math.min(retries * 50, 500),
-          },
-        });
-
-        this.redisClient.on("error", (err: Error) => {
-          console.error("Redis Client Error:", err);
-        });
-
-        await this.redisClient.connect();
-
-        // Use new RedisStore API (no session wrapper)
-        this.store = new RedisStore({
-          client: this.redisClient,
-          prefix: "aeo:session:",
-        });
-
-        console.log("Session store initialized with Redis");
-      } catch (error) {
-        console.error(
-          "Failed to initialize Redis store, falling back to memory store:",
-          error
-        );
-        this.initializeMemoryStore();
-      }
-    } else {
-      // Use memory store in development
+    // Use MongoDB session store for all environments
+    try {
+      this.store = new MongoSessionStore();
+      console.log("🗄️ Session store initialized with MongoDB");
+    } catch (error) {
+      console.error(
+        "Failed to initialize MongoDB session store, falling back to memory store:",
+        error
+      );
       this.initializeMemoryStore();
     }
   }
@@ -201,12 +222,11 @@ class SessionService {
   }
 
   /**
-   * Close Redis connection
+   * Close MongoDB connection
    */
   async close(): Promise<void> {
-    if (this.redisClient) {
-      await this.redisClient.quit();
-    }
+    // MongoDB connections are handled by mongoose
+    console.log("🗄️ MongoDB session store connection cleanup completed");
   }
 }
 

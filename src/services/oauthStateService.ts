@@ -2,13 +2,13 @@
  * OAuth State Storage Service
  *
  * Provides a unified interface for storing OAuth state and PKCE parameters.
- * Supports both in-memory storage (development/single instance) and Redis (production/multi-instance).
+ * Uses MongoDB for persistent storage across all instances.
  *
  * This service is essential for OAuth flows in distributed deployments where state
  * must be shared across multiple application instances.
  */
 
-import { configService } from "./configService";
+import { OAuthState } from "../models";
 
 export interface IPkceData {
   codeVerifier: string;
@@ -30,201 +30,134 @@ export interface IOAuthStateService {
 }
 
 /**
- * In-Memory Storage Implementation
- * Use for development or single-instance deployments
+ * MongoDB Storage Implementation
+ * Uses MongoDB for persistent OAuth state storage across all instances
  */
-class InMemoryOAuthStateService implements IOAuthStateService {
-  private pkceStore = new Map<string, IPkceData>();
-  private stateStore = new Map<string, IStateData>();
-  private cleanupInterval?: NodeJS.Timeout;
-
+class MongoOAuthStateService implements IOAuthStateService {
   constructor() {
-    // Clean up expired entries every 5 minutes
-    this.cleanupInterval = setInterval(
-      () => {
-        this.cleanupExpired();
-      },
-      5 * 60 * 1000
-    );
-  }
-
-  private cleanupExpired(): void {
-    const now = Date.now();
-
-    // Clean PKCE store
-    for (const [key, value] of this.pkceStore.entries()) {
-      if (value.expiresAt < now) {
-        this.pkceStore.delete(key);
-      }
-    }
-
-    // Clean state store
-    for (const [key, value] of this.stateStore.entries()) {
-      if (value.expiresAt < now) {
-        this.stateStore.delete(key);
-      }
-    }
-  }
-
-  async setPkce(codeChallenge: string, data: IPkceData): Promise<void> {
-    this.pkceStore.set(codeChallenge, data);
-  }
-
-  async getPkce(codeChallenge: string): Promise<IPkceData | undefined> {
-    return this.pkceStore.get(codeChallenge);
-  }
-
-  async deletePkce(codeChallenge: string): Promise<void> {
-    this.pkceStore.delete(codeChallenge);
-  }
-
-  async setState(state: string, data: IStateData): Promise<void> {
     console.log(
-      `🔒 [InMemory] Setting state: ${state.substring(0, 8)}... (expires: ${new Date(data.expiresAt).toISOString()})`
-    );
-    this.stateStore.set(state, data);
-    console.log(
-      `🔒 [InMemory] State stored. Total states: ${this.stateStore.size}`
+      "🗄️ [MongoDB] OAuth state service initialized with MongoDB storage"
     );
   }
 
-  async getState(state: string): Promise<IStateData | undefined> {
-    const result = this.stateStore.get(state);
-    console.log(
-      `🔍 [InMemory] Getting state: ${state.substring(0, 8)}... ${result ? "FOUND" : "NOT FOUND"}`
-    );
-    if (result) {
-      console.log(
-        `🔍 [InMemory] State expires: ${new Date(result.expiresAt).toISOString()}, now: ${new Date().toISOString()}`
-      );
-    }
-    console.log(
-      `🔍 [InMemory] Total states in memory: ${this.stateStore.size}`
-    );
-    return result;
-  }
-
-  async deleteState(state: string): Promise<void> {
-    console.log(`🗑️ [InMemory] Deleting state: ${state.substring(0, 8)}...`);
-    this.stateStore.delete(state);
-    console.log(
-      `🗑️ [InMemory] State deleted. Total states: ${this.stateStore.size}`
-    );
-  }
-
-  cleanup(): void {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-    }
-  }
-}
-
-/**
- * Redis Storage Implementation
- * Use for production multi-instance deployments
- */
-class RedisOAuthStateService implements IOAuthStateService {
-  private redisClient: any; // Type will be from redis package
-  private readonly TTL_SECONDS = 600; // 10 minutes
-
-  constructor(redisUrl: string) {
-    // Dynamic import to avoid requiring Redis in all environments
-    this.initRedis(redisUrl);
-  }
-
-  private async initRedis(redisUrl: string): Promise<void> {
+  private async upsertState(
+    key: string,
+    data: any,
+    expiresAt: number
+  ): Promise<void> {
     try {
-      const redis = await import("redis");
-      this.redisClient = redis.createClient({ url: redisUrl });
-
-      this.redisClient.on("error", (err: Error) => {
-        console.error("Redis connection error:", err);
-      });
-
-      await this.redisClient.connect();
-      console.log("✅ Redis connected for OAuth state management");
+      await OAuthState.findOneAndUpdate(
+        { key },
+        {
+          key,
+          data,
+          expiresAt: new Date(expiresAt),
+        },
+        { upsert: true, new: true }
+      );
     } catch (error) {
-      console.error("Failed to initialize Redis:", error);
-      throw new Error("Redis initialization failed");
+      console.error("MongoDB OAuth state upsert error:", error);
+      throw error;
+    }
+  }
+
+  private async getStateData(key: string): Promise<any> {
+    try {
+      const doc = await OAuthState.findOne({ key });
+      return doc ? doc.data : undefined;
+    } catch (error) {
+      console.error("MongoDB OAuth state get error:", error);
+      throw error;
+    }
+  }
+
+  private async deleteStateData(key: string): Promise<void> {
+    try {
+      await OAuthState.deleteOne({ key });
+    } catch (error) {
+      console.error("MongoDB OAuth state delete error:", error);
+      throw error;
     }
   }
 
   async setPkce(codeChallenge: string, data: IPkceData): Promise<void> {
-    const key = `oauth:pkce:${codeChallenge}`;
-    await this.redisClient.set(key, JSON.stringify(data), {
-      EX: this.TTL_SECONDS,
-    });
+    const key = `pkce:${codeChallenge}`;
+    console.log(
+      `🔒 [MongoDB] Setting PKCE: ${codeChallenge.substring(0, 8)}... (expires: ${new Date(data.expiresAt).toISOString()})`
+    );
+    await this.upsertState(key, data, data.expiresAt);
+    console.log(`🔒 [MongoDB] PKCE stored in MongoDB`);
   }
 
   async getPkce(codeChallenge: string): Promise<IPkceData | undefined> {
-    const key = `oauth:pkce:${codeChallenge}`;
-    const data = await this.redisClient.get(key);
-    return data ? JSON.parse(data) : undefined;
+    const key = `pkce:${codeChallenge}`;
+    console.log(
+      `🔍 [MongoDB] Getting PKCE: ${codeChallenge.substring(0, 8)}...`
+    );
+    const result = await this.getStateData(key);
+    console.log(
+      `🔍 [MongoDB] PKCE ${codeChallenge.substring(0, 8)}... ${result ? "FOUND" : "NOT FOUND"}`
+    );
+    return result;
   }
 
   async deletePkce(codeChallenge: string): Promise<void> {
-    const key = `oauth:pkce:${codeChallenge}`;
-    await this.redisClient.del(key);
+    const key = `pkce:${codeChallenge}`;
+    console.log(
+      `🗑️ [MongoDB] Deleting PKCE: ${codeChallenge.substring(0, 8)}...`
+    );
+    await this.deleteStateData(key);
+    console.log(`🗑️ [MongoDB] PKCE deleted from MongoDB`);
   }
 
   async setState(state: string, data: IStateData): Promise<void> {
-    const key = `oauth:state:${state}`;
+    const key = `state:${state}`;
     console.log(
-      `🔒 [Redis] Setting state: ${state.substring(0, 8)}... (expires: ${new Date(data.expiresAt).toISOString()})`
+      `🔒 [MongoDB] Setting state: ${state.substring(0, 8)}... (expires: ${new Date(data.expiresAt).toISOString()})`
     );
-    await this.redisClient.set(key, JSON.stringify(data), {
-      EX: this.TTL_SECONDS,
-    });
-    console.log(
-      `🔒 [Redis] State stored in Redis with TTL: ${this.TTL_SECONDS}s`
-    );
+    await this.upsertState(key, data, data.expiresAt);
+    console.log(`🔒 [MongoDB] State stored in MongoDB`);
   }
 
   async getState(state: string): Promise<IStateData | undefined> {
-    const key = `oauth:state:${state}`;
-    console.log(`🔍 [Redis] Getting state: ${state.substring(0, 8)}...`);
-    const data = await this.redisClient.get(key);
-    const result = data ? JSON.parse(data) : undefined;
+    const key = `state:${state}`;
+    console.log(`🔍 [MongoDB] Getting state: ${state.substring(0, 8)}...`);
+    const result = await this.getStateData(key);
     console.log(
-      `🔍 [Redis] State ${state.substring(0, 8)}... ${result ? "FOUND" : "NOT FOUND"}`
+      `🔍 [MongoDB] State ${state.substring(0, 8)}... ${result ? "FOUND" : "NOT FOUND"}`
     );
     if (result) {
       console.log(
-        `🔍 [Redis] State expires: ${new Date(result.expiresAt).toISOString()}, now: ${new Date().toISOString()}`
+        `🔍 [MongoDB] State expires: ${new Date(result.expiresAt).toISOString()}, now: ${new Date().toISOString()}`
       );
     }
     return result;
   }
 
   async deleteState(state: string): Promise<void> {
-    const key = `oauth:state:${state}`;
-    console.log(`🗑️ [Redis] Deleting state: ${state.substring(0, 8)}...`);
-    await this.redisClient.del(key);
-    console.log(`🗑️ [Redis] State deleted from Redis`);
+    const key = `state:${state}`;
+    console.log(`🗑️ [MongoDB] Deleting state: ${state.substring(0, 8)}...`);
+    await this.deleteStateData(key);
+    console.log(`🗑️ [MongoDB] State deleted from MongoDB`);
   }
 
   cleanup(): void {
-    if (this.redisClient) {
-      this.redisClient.quit();
-    }
+    // MongoDB TTL index handles cleanup automatically
+    console.log(
+      "🗄️ [MongoDB] Cleanup not needed - MongoDB TTL handles expiration"
+    );
   }
 }
 
 /**
- * Factory function to create the appropriate OAuth state service based on configuration
+ * Factory function to create the OAuth state service
+ * Always uses MongoDB for consistent storage across all environments
  */
 function createOAuthStateService(): IOAuthStateService {
-  const redisUrl = configService.get("REDIS_URL");
-
-  if (redisUrl && process.env.NODE_ENV === "production") {
-    console.log("Using Redis for OAuth state management (multi-instance safe)");
-    return new RedisOAuthStateService(redisUrl);
-  } else {
-    console.log(
-      "⚠️  Using in-memory OAuth state management (single instance only)"
-    );
-    return new InMemoryOAuthStateService();
-  }
+  console.log(
+    "🗄️ Using MongoDB for OAuth state management (multi-instance safe)"
+  );
+  return new MongoOAuthStateService();
 }
 
 // Export singleton instance
