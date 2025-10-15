@@ -257,8 +257,13 @@ class ConfigService {
     // Construct JWKS endpoint - ensure proper format
     const jwksEndpoint = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
 
-    // Ensure the domain doesn't have double slashes or protocol issues
-    const baseUrl = `https://${cleanDomain}`;
+    // Use the domain as-is if it already has protocol, otherwise add https://
+    let baseUrl;
+    if (domain.startsWith("https://")) {
+      baseUrl = domain; // Use domain as-is if it already has https://
+    } else {
+      baseUrl = `https://${cleanDomain}`;
+    }
 
     return {
       authorization: `${baseUrl}/login`,
