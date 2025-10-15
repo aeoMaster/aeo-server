@@ -4,11 +4,13 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import passport from "passport";
 import session from "express-session";
+import cookieParser from "cookie-parser";
 import { errorHandler } from "./middleware/errorHandler";
 import { initializePassport } from "./config/passport";
 import { seedPackages } from "./config/seedPackages";
 import { authRoutes } from "./routes/auth";
 import { cognitoAuthRoutes } from "./routes/cognitoAuth";
+import { simplifiedCognitoAuthRoutes } from "./routes/simplifiedCognitoAuth";
 import { analyzeRoutes } from "./routes/analyze";
 import { settingsRoutes } from "./routes/settings";
 import { subscriptionRoutes } from "./routes/subscription";
@@ -186,6 +188,7 @@ if (configService.isCognitoAuth()) {
 // Body parsing middleware
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(cookieParser()); // Add cookie parsing for session management
 
 // Rate limiting
 app.use("/api/auth", authRateLimit);
@@ -214,7 +217,10 @@ mongoose
 // Routes
 app.use("/api/auth", authRoutes);
 if (configService.isCognitoAuth()) {
-  app.use("/api/auth", cognitoAuthRoutes);
+  // Use simplified Cognito auth routes for better reliability
+  app.use("/api/auth", simplifiedCognitoAuthRoutes);
+  // Keep original routes as backup at different path
+  app.use("/api/auth/complex", cognitoAuthRoutes);
 }
 app.use("/api/analyze", analyzeRoutes);
 app.use("/api/settings", settingsRoutes);
