@@ -35,9 +35,7 @@ export interface IOAuthStateService {
  */
 class MongoOAuthStateService implements IOAuthStateService {
   constructor() {
-    console.log(
-      "🗄️ [MongoDB] OAuth state service constructor called"
-    );
+    console.log("🗄️ [MongoDB] OAuth state service constructor called");
     console.log(
       "🗄️ [MongoDB] OAuth state service initialized with MongoDB storage"
     );
