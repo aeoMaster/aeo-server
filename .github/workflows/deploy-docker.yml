@@ -57,9 +57,9 @@ jobs:
           NODE_ENV=production
           PORT=5000
 
-          # Database (MongoDB Atlas + Cloud Redis)
+          # Database (MongoDB Atlas + Redis)
           MONGODB_URI=${{ secrets.MONGODB_URI }}
-          # REDIS_URL=${{ secrets.REDIS_URL }}  # Commented out - not using Redis yet
+          REDIS_URL=redis://redis:6379
 
           # Authentication
           AUTH_PROVIDER=${{ secrets.AUTH_PROVIDER }}
