@@ -20,6 +20,7 @@ import { blogRoutes } from "./routes/blog";
 import { oauthRoutes } from "./routes/oauth";
 import { clarityScannerRoutes } from "./routes/clarityScanner";
 import { healthRoutes } from "./routes/health";
+import { debugRoutes } from "./routes/debug";
 import { sessionService } from "./services/sessionService";
 import { configService } from "./services/configService";
 import {
@@ -151,6 +152,7 @@ app.use("/api/site", siteAnalysisRoutes);
 app.use("/api/blogs", blogRoutes);
 app.use("/api/oauth", oauthRoutes);
 app.use("/api/clarity-scan", clarityScannerRoutes);
+app.use("/api/debug", debugRoutes);
 app.use("/health", healthRoutes);
 
 // Error handling
