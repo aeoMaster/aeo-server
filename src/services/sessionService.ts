@@ -16,6 +16,11 @@ export interface ISessionData {
 
 // MongoDB Session Store
 class MongoSessionStore extends session.Store {
+  constructor() {
+    super();
+    console.log("🗄️ MongoSessionStore constructor called");
+  }
+
   async get(
     sessionId: string,
     callback: (err: any, session?: session.SessionData | null) => void
@@ -28,6 +33,7 @@ class MongoSessionStore extends session.Store {
         callback(null, null);
       }
     } catch (error) {
+      console.error("MongoSessionStore get error:", error);
       callback(error);
     }
   }
@@ -48,6 +54,7 @@ class MongoSessionStore extends session.Store {
       );
       callback?.();
     } catch (error) {
+      console.error("MongoSessionStore set error:", error);
       callback?.(error);
     }
   }
@@ -57,6 +64,7 @@ class MongoSessionStore extends session.Store {
       await Session.findByIdAndDelete(sessionId);
       callback?.();
     } catch (error) {
+      console.error("MongoSessionStore destroy error:", error);
       callback?.(error);
     }
   }
@@ -81,6 +89,7 @@ class SessionService {
   private async initializeStore(): Promise<void> {
     // Use MongoDB session store for all environments
     try {
+      console.log("🗄️ Initializing MongoDB session store...");
       this.store = new MongoSessionStore();
       console.log("🗄️ Session store initialized with MongoDB");
     } catch (error) {
