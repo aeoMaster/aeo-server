@@ -79,15 +79,37 @@ class InMemoryOAuthStateService implements IOAuthStateService {
   }
 
   async setState(state: string, data: IStateData): Promise<void> {
+    console.log(
+      `🔒 [InMemory] Setting state: ${state.substring(0, 8)}... (expires: ${new Date(data.expiresAt).toISOString()})`
+    );
     this.stateStore.set(state, data);
+    console.log(
+      `🔒 [InMemory] State stored. Total states: ${this.stateStore.size}`
+    );
   }
 
   async getState(state: string): Promise<IStateData | undefined> {
-    return this.stateStore.get(state);
+    const result = this.stateStore.get(state);
+    console.log(
+      `🔍 [InMemory] Getting state: ${state.substring(0, 8)}... ${result ? "FOUND" : "NOT FOUND"}`
+    );
+    if (result) {
+      console.log(
+        `🔍 [InMemory] State expires: ${new Date(result.expiresAt).toISOString()}, now: ${new Date().toISOString()}`
+      );
+    }
+    console.log(
+      `🔍 [InMemory] Total states in memory: ${this.stateStore.size}`
+    );
+    return result;
   }
 
   async deleteState(state: string): Promise<void> {
+    console.log(`🗑️ [InMemory] Deleting state: ${state.substring(0, 8)}...`);
     this.stateStore.delete(state);
+    console.log(
+      `🗑️ [InMemory] State deleted. Total states: ${this.stateStore.size}`
+    );
   }
 
   cleanup(): void {
@@ -147,20 +169,38 @@ class RedisOAuthStateService implements IOAuthStateService {
 
   async setState(state: string, data: IStateData): Promise<void> {
     const key = `oauth:state:${state}`;
+    console.log(
+      `🔒 [Redis] Setting state: ${state.substring(0, 8)}... (expires: ${new Date(data.expiresAt).toISOString()})`
+    );
     await this.redisClient.set(key, JSON.stringify(data), {
       EX: this.TTL_SECONDS,
     });
+    console.log(
+      `🔒 [Redis] State stored in Redis with TTL: ${this.TTL_SECONDS}s`
+    );
   }
 
   async getState(state: string): Promise<IStateData | undefined> {
     const key = `oauth:state:${state}`;
+    console.log(`🔍 [Redis] Getting state: ${state.substring(0, 8)}...`);
     const data = await this.redisClient.get(key);
-    return data ? JSON.parse(data) : undefined;
+    const result = data ? JSON.parse(data) : undefined;
+    console.log(
+      `🔍 [Redis] State ${state.substring(0, 8)}... ${result ? "FOUND" : "NOT FOUND"}`
+    );
+    if (result) {
+      console.log(
+        `🔍 [Redis] State expires: ${new Date(result.expiresAt).toISOString()}, now: ${new Date().toISOString()}`
+      );
+    }
+    return result;
   }
 
   async deleteState(state: string): Promise<void> {
     const key = `oauth:state:${state}`;
+    console.log(`🗑️ [Redis] Deleting state: ${state.substring(0, 8)}...`);
     await this.redisClient.del(key);
+    console.log(`🗑️ [Redis] State deleted from Redis`);
   }
 
   cleanup(): void {

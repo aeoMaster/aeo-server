@@ -39,6 +39,9 @@ dotenv.config();
 
 const app: Express = express();
 
+// Trust proxy for accurate IP detection behind nginx load balancer
+app.set("trust proxy", true);
+
 // Test Cognito connectivity at startup
 async function testCognitoConnectivity(endpoints: any) {
   try {
