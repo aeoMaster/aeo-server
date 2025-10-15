@@ -135,7 +135,7 @@ REDIS_URL=${{ secrets.REDIS_URL }}
 ### 4. Add GitHub Secret
 
 ```bash
-REDIS_URL=redis://redis:6379
+REDIS_URL=redis://aeo-redis-prod:6379/0
 ```
 
 ### 5. Install Redis client

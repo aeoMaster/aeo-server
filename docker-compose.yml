@@ -67,7 +67,7 @@ services:
       - NODE_ENV=development
       - PORT=5000
       - MONGODB_URI=${MONGODB_URI}
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://aeo-redis-prod:6379/0
       # Auth Configuration
       - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}
       - JWT_SECRET=${JWT_SECRET}

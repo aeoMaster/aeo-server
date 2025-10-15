@@ -35,7 +35,8 @@ class ConfigService {
     this.config.COOKIE_NAME = process.env.COOKIE_NAME || "aeo_session";
 
     // Redis configuration
-    this.config.REDIS_URL = process.env.REDIS_URL || "redis://redis:6379";
+    this.config.REDIS_URL =
+      process.env.REDIS_URL || "redis://aeo-redis-prod:6379/0";
 
     // Frontend configuration
     this.config.FRONTEND_ORIGIN =

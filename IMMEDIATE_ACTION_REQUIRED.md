@@ -87,7 +87,7 @@ redis:
 ### 3. Add GitHub Secret
 
 ```bash
-REDIS_URL=redis://redis:6379
+REDIS_URL=redis://aeo-redis-prod:6379/0
 ```
 
 ### 4. Uncomment in .github/workflows/deploy-docker.yml
