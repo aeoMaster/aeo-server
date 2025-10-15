@@ -175,6 +175,7 @@ class ConfigService {
   getAllowedOrigins(): string[] {
     const origins = [
       this.config.FRONTEND_ORIGIN,
+      "https://themoda.io",
       "http://localhost:3000",
       "http://localhost:3001",
     ].filter(Boolean);

@@ -87,8 +87,8 @@ services:
       - LINKEDIN_CLIENT_SECRET=${LINKEDIN_CLIENT_SECRET}
       - LINKEDIN_REDIRECT_URI=${LINKEDIN_REDIRECT_URI}
       # Frontend URLs
-      - CLIENT_URL=${CLIENT_URL:-http://localhost:3000}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - CLIENT_URL=${CLIENT_URL:-https://themoda.io}
+      - FRONTEND_URL=${FRONTEND_URL:-https://themoda.io}
       # API Keys
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       # - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
@@ -169,8 +169,8 @@ services:
       - LINKEDIN_CLIENT_SECRET=${LINKEDIN_CLIENT_SECRET}
       - LINKEDIN_REDIRECT_URI=${LINKEDIN_REDIRECT_URI}
       # Frontend URLs
-      - CLIENT_URL=${CLIENT_URL:-http://localhost:3000}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - CLIENT_URL=${CLIENT_URL:-https://themoda.io}
+      - FRONTEND_URL=${FRONTEND_URL:-https://themoda.io}
       # API Keys
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       # - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}

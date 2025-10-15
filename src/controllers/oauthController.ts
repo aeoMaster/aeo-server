@@ -163,7 +163,7 @@ export class OAuthController {
       console.log("profile", profile);
       console.log("blogId", blogId);
       // Redirect to frontend with blogId if provided
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+      const frontendUrl = process.env.FRONTEND_URL || "https://themoda.io";
       console.log(
         "frontendUrl",
         `${frontendUrl}/dashboard/blogs/${blogId}?platform=linkedin`
@@ -318,7 +318,7 @@ export class OAuthController {
       console.log("blogId", blogId);
 
       // Redirect to frontend with blogId if provided
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+      const frontendUrl = process.env.FRONTEND_URL || "https://themoda.io";
 
       if (blogId) {
         return res.redirect(
