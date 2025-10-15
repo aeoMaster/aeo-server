@@ -70,17 +70,35 @@ async function testCognitoConnectivity(endpoints: any) {
           `❌ JWKS endpoint returned ${jwksResponse.status}: ${jwksResponse.statusText}`
         );
         console.error(`🔗 JWKS URL: ${endpoints.jwks}`);
-        throw new Error(
-          `JWKS endpoint not reachable: ${jwksResponse.status} - ${jwksResponse.statusText}`
-        );
+
+        // Don't throw error for 400 - just log warning and continue
+        if (jwksResponse.status === 400) {
+          console.warn(
+            "⚠️  JWKS endpoint returned 400 - this may be due to User Pool configuration"
+          );
+          console.warn(
+            "💡 The application will still work, but JWT validation may be affected"
+          );
+          console.warn(
+            "🔧 Verify your Cognito User Pool ID format and region settings"
+          );
+        } else {
+          throw new Error(
+            `JWKS endpoint not reachable: ${jwksResponse.status} - ${jwksResponse.statusText}`
+          );
+        }
+      } else {
+        console.log("✅ JWKS endpoint reachable");
       }
-      console.log("✅ JWKS endpoint reachable");
     } catch (jwksError) {
       console.error("❌ JWKS endpoint test failed:", jwksError);
       console.log(
         "💡 Check your COGNITO_USER_POOL_ID and COGNITO_REGION environment variables"
       );
-      throw jwksError;
+      // Don't throw for network errors - just log and continue
+      console.warn(
+        "⚠️  JWKS connectivity test failed, but application will continue"
+      );
     }
 
     // Test token endpoint

@@ -44,7 +44,7 @@ export const enforceHttps = (
     return next();
   }
 
-  // Allow health check endpoints from localhost/loopback
+  // Allow health check endpoints from localhost/loopback and Docker health checks
   const isLocalhost =
     req.ip === "127.0.0.1" ||
     req.ip === "::1" ||
@@ -55,7 +55,16 @@ export const enforceHttps = (
   const isHealthCheck =
     req.path === "/health" || req.path.startsWith("/health/");
 
-  if (isLocalhost && isHealthCheck) {
+  // Allow health checks from localhost or Docker health check system
+  const isHealthCheckUserAgent =
+    req.get("User-Agent")?.includes("health") ||
+    req.get("User-Agent")?.includes("curl") ||
+    !req.get("User-Agent"); // Docker health checks often have no user agent
+
+  if (
+    (isLocalhost && isHealthCheck) ||
+    (isHealthCheck && isHealthCheckUserAgent)
+  ) {
     return next();
   }
 

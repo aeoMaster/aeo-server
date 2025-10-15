@@ -243,11 +243,21 @@ class ConfigService {
       cleanDomain = domain.replace("https://", "");
     }
 
+    // Validate User Pool ID format - it should start with region
+    if (!userPoolId.startsWith(region)) {
+      console.warn(
+        `⚠️  User Pool ID "${userPoolId}" doesn't start with region "${region}" - this may cause JWKS endpoint issues`
+      );
+    }
+
+    // Construct JWKS endpoint - ensure proper format
+    const jwksEndpoint = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
+
     return {
       authorization: `https://${cleanDomain}/login`,
       token: `https://${cleanDomain}/oauth2/token`,
       logout: `https://${cleanDomain}/logout`,
-      jwks: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`,
+      jwks: jwksEndpoint,
     };
   }
 
