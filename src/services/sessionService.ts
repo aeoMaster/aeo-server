@@ -33,7 +33,7 @@ class SessionService {
   }
 
   private async initializeStore(): Promise<void> {
-    const redisUrl = process.env.REDIS_URL;
+    const redisUrl = process.env.REDIS_URL || "redis://redis:6379";
 
     if (redisUrl && process.env.NODE_ENV !== "development") {
       // Use Redis in production/staging
