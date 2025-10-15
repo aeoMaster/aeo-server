@@ -2,7 +2,6 @@ import { Request, Response, NextFunction } from "express";
 import passport from "passport";
 import { AppError } from "./errorHandler";
 import { roleMappingService } from "../services/roleMappingService";
-import { User } from "../models/User";
 
 // Extend Express Request interface for Cognito auth
 declare global {
