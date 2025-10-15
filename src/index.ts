@@ -47,20 +47,71 @@ app.set("trust proxy", 1);
 async function testCognitoConnectivity(endpoints: any) {
   try {
     console.log("🔍 Testing Cognito connectivity...");
+    console.log("📋 Testing endpoints:", {
+      jwks: endpoints.jwks,
+      token: endpoints.token,
+      authorization: endpoints.authorization,
+    });
 
-    // Test JWKS endpoint
-    const jwksResponse = await fetch(endpoints.jwks, { method: "HEAD" });
-    if (!jwksResponse.ok) {
-      throw new Error(`JWKS endpoint not reachable: ${jwksResponse.status}`);
+    // Test JWKS endpoint with better error handling
+    try {
+      const jwksController = new AbortController();
+      const jwksTimeoutId = setTimeout(() => jwksController.abort(), 10000); // 10 second timeout
+
+      const jwksResponse = await fetch(endpoints.jwks, {
+        method: "HEAD",
+        signal: jwksController.signal,
+      });
+
+      clearTimeout(jwksTimeoutId);
+
+      if (!jwksResponse.ok) {
+        console.error(
+          `❌ JWKS endpoint returned ${jwksResponse.status}: ${jwksResponse.statusText}`
+        );
+        console.error(`🔗 JWKS URL: ${endpoints.jwks}`);
+        throw new Error(
+          `JWKS endpoint not reachable: ${jwksResponse.status} - ${jwksResponse.statusText}`
+        );
+      }
+      console.log("✅ JWKS endpoint reachable");
+    } catch (jwksError) {
+      console.error("❌ JWKS endpoint test failed:", jwksError);
+      console.log(
+        "💡 Check your COGNITO_USER_POOL_ID and COGNITO_REGION environment variables"
+      );
+      throw jwksError;
     }
-    console.log("✅ JWKS endpoint reachable");
 
     // Test token endpoint
-    const tokenResponse = await fetch(endpoints.token, { method: "HEAD" });
-    if (!tokenResponse.ok) {
-      throw new Error(`Token endpoint not reachable: ${tokenResponse.status}`);
+    try {
+      const tokenController = new AbortController();
+      const tokenTimeoutId = setTimeout(() => tokenController.abort(), 10000); // 10 second timeout
+
+      const tokenResponse = await fetch(endpoints.token, {
+        method: "HEAD",
+        signal: tokenController.signal,
+      });
+
+      clearTimeout(tokenTimeoutId);
+
+      if (!tokenResponse.ok) {
+        console.error(
+          `❌ Token endpoint returned ${tokenResponse.status}: ${tokenResponse.statusText}`
+        );
+        console.error(`🔗 Token URL: ${endpoints.token}`);
+        throw new Error(
+          `Token endpoint not reachable: ${tokenResponse.status} - ${tokenResponse.statusText}`
+        );
+      }
+      console.log("✅ Token endpoint reachable");
+    } catch (tokenError) {
+      console.error("❌ Token endpoint test failed:", tokenError);
+      console.log(
+        "💡 Check your COGNITO_DOMAIN and COGNITO_REGION environment variables"
+      );
+      throw tokenError;
     }
-    console.log("✅ Token endpoint reachable");
 
     console.log("✅ Cognito connectivity test passed");
   } catch (error) {
@@ -68,6 +119,11 @@ async function testCognitoConnectivity(endpoints: any) {
     console.log(
       "💡 This may be normal in development. Ensure your Cognito configuration is correct."
     );
+    console.log("🔧 Verify these environment variables:");
+    console.log("   - COGNITO_REGION");
+    console.log("   - COGNITO_USER_POOL_ID");
+    console.log("   - COGNITO_DOMAIN");
+    console.log("   - COGNITO_APP_CLIENT_ID");
   }
 }
 

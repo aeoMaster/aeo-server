@@ -44,6 +44,21 @@ export const enforceHttps = (
     return next();
   }
 
+  // Allow health check endpoints from localhost/loopback
+  const isLocalhost =
+    req.ip === "127.0.0.1" ||
+    req.ip === "::1" ||
+    req.ip === "::ffff:127.0.0.1" ||
+    req.connection?.remoteAddress === "127.0.0.1" ||
+    req.connection?.remoteAddress === "::1";
+
+  const isHealthCheck =
+    req.path === "/health" || req.path.startsWith("/health/");
+
+  if (isLocalhost && isHealthCheck) {
+    return next();
+  }
+
   // Check for HTTPS in various proxy scenarios
   const isHttps =
     req.secure ||

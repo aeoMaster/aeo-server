@@ -111,6 +111,35 @@ class ConfigService {
       );
     }
 
+    // Validate User Pool ID format (should start with region)
+    if (
+      this.config.COGNITO_USER_POOL_ID &&
+      !this.config.COGNITO_USER_POOL_ID.startsWith(this.config.COGNITO_REGION)
+    ) {
+      console.warn(
+        `⚠️  User Pool ID "${this.config.COGNITO_USER_POOL_ID}" doesn't start with region "${this.config.COGNITO_REGION}"`
+      );
+    }
+
+    // Validate region format
+    if (
+      this.config.COGNITO_REGION &&
+      !/^[a-z0-9-]+$/.test(this.config.COGNITO_REGION)
+    ) {
+      throw new Error("COGNITO_REGION must be a valid AWS region format");
+    }
+
+    // Log configuration for debugging (non-sensitive)
+    console.log("📋 Cognito Configuration:");
+    console.log(`   Region: ${this.config.COGNITO_REGION}`);
+    console.log(`   Domain: ${this.config.COGNITO_DOMAIN}`);
+    console.log(
+      `   User Pool ID: ${this.config.COGNITO_USER_POOL_ID?.substring(0, 20)}...`
+    );
+    console.log(
+      `   App Client ID: ${this.config.COGNITO_APP_CLIENT_ID?.substring(0, 20)}...`
+    );
+
     // Log client type for debugging
     if (this.config.COGNITO_APP_CLIENT_SECRET) {
       console.log("🔐 Using confidential client (with secret)");
