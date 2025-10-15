@@ -1,4 +1,6 @@
 import session from "express-session";
+import { RedisStore } from "connect-redis";
+import { createClient } from "redis";
 import { v4 as uuidv4 } from "uuid";
 
 export interface ISessionData {
@@ -31,8 +33,42 @@ class SessionService {
   }
 
   private async initializeStore(): Promise<void> {
-    // Use memory store for sessions - OAuth state is handled separately by oauthStateService
-    this.initializeMemoryStore();
+    const redisUrl = process.env.REDIS_URL || "redis://aeo-redis-prod:6379";
+
+    if (redisUrl && process.env.NODE_ENV === "production") {
+      // Use Redis in production
+      try {
+        this.redisClient = createClient({
+          url: redisUrl,
+          socket: {
+            reconnectStrategy: (retries) => Math.min(retries * 50, 500),
+          },
+        });
+
+        this.redisClient.on("error", (err: Error) => {
+          console.error("Redis Client Error:", err);
+        });
+
+        await this.redisClient.connect();
+
+        // Use new RedisStore API (no session wrapper)
+        this.store = new RedisStore({
+          client: this.redisClient,
+          prefix: "aeo:session:",
+        });
+
+        console.log("Session store initialized with Redis");
+      } catch (error) {
+        console.error(
+          "Failed to initialize Redis store, falling back to memory store:",
+          error
+        );
+        this.initializeMemoryStore();
+      }
+    } else {
+      // Use memory store in development
+      this.initializeMemoryStore();
+    }
   }
 
   private initializeMemoryStore(): void {
@@ -54,11 +90,13 @@ class SessionService {
       resave: false,
       saveUninitialized: false,
       rolling: true, // Reset expiration on each request
+      proxy: true, // Trust proxy for accurate IP detection
       cookie: {
-        secure: process.env.NODE_ENV === "production",
+        secure: process.env.NODE_ENV === "production", // HTTPS in production
         httpOnly: true,
-        sameSite: "strict",
+        sameSite: process.env.NODE_ENV === "production" ? "lax" : "strict", // Lax for production cross-site
         maxAge: this.sessionTtl * 1000, // Convert to milliseconds
+        domain: process.env.COOKIE_DOMAIN || undefined, // Set domain for multi-container consistency
       },
       genid: () => uuidv4(),
     };
