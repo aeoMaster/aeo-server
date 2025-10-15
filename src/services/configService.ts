@@ -237,6 +237,10 @@ class ConfigService {
     const region = this.config.COGNITO_REGION;
     const userPoolId = this.config.COGNITO_USER_POOL_ID;
 
+    if (!domain || !region || !userPoolId) {
+      throw new Error("Missing required Cognito configuration for endpoints");
+    }
+
     // Handle both cases: domain with or without https:// prefix
     let cleanDomain = domain;
     if (domain.startsWith("https://")) {
@@ -253,10 +257,13 @@ class ConfigService {
     // Construct JWKS endpoint - ensure proper format
     const jwksEndpoint = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
 
+    // Ensure the domain doesn't have double slashes or protocol issues
+    const baseUrl = `https://${cleanDomain}`;
+
     return {
-      authorization: `https://${cleanDomain}/login`,
-      token: `https://${cleanDomain}/oauth2/token`,
-      logout: `https://${cleanDomain}/logout`,
+      authorization: `${baseUrl}/login`,
+      token: `${baseUrl}/oauth2/token`,
+      logout: `${baseUrl}/logout`,
       jwks: jwksEndpoint,
     };
   }

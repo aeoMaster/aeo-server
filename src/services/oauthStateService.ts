@@ -53,11 +53,18 @@ class MongoOAuthStateService implements IOAuthStateService {
           key,
           data,
           expiresAt: new Date(expiresAt),
+          createdAt: new Date(),
         },
         { upsert: true, new: true }
       );
+      console.log(
+        `🔒 [MongoDB] Upserted state with key: ${key}, expires: ${new Date(expiresAt).toISOString()}`
+      );
     } catch (error) {
       console.error("MongoDB OAuth state upsert error:", error);
+      console.error("Key:", key);
+      console.error("Data:", data);
+      console.error("ExpiresAt:", new Date(expiresAt).toISOString());
       throw error;
     }
   }
@@ -116,8 +123,14 @@ class MongoOAuthStateService implements IOAuthStateService {
     console.log(
       `🔒 [MongoDB] Setting state: ${state.substring(0, 8)}... (expires: ${new Date(data.expiresAt).toISOString()})`
     );
-    await this.upsertState(key, data, data.expiresAt);
-    console.log(`🔒 [MongoDB] State stored in MongoDB`);
+    console.log(`🔒 [MongoDB] Full state key: ${key}`);
+    try {
+      await this.upsertState(key, data, data.expiresAt);
+      console.log(`🔒 [MongoDB] State stored in MongoDB successfully`);
+    } catch (error) {
+      console.error(`🔒 [MongoDB] Failed to store state:`, error);
+      throw error;
+    }
   }
 
   async getState(state: string): Promise<IStateData | undefined> {
@@ -126,20 +139,43 @@ class MongoOAuthStateService implements IOAuthStateService {
       `🔍 [MongoDB] Getting state: ${state.substring(0, 8)}... (full length: ${state.length})`
     );
     console.log(`🔍 [MongoDB] Looking for key: ${key}`);
-    const result = await this.getStateData(key);
-    console.log(
-      `🔍 [MongoDB] State ${state.substring(0, 8)}... ${result ? "FOUND" : "NOT FOUND"}`
-    );
-    if (result) {
+    try {
+      const result = await this.getStateData(key);
       console.log(
-        `🔍 [MongoDB] State expires: ${new Date(result.expiresAt).toISOString()}, now: ${new Date().toISOString()}`
+        `🔍 [MongoDB] State ${state.substring(0, 8)}... ${result ? "FOUND" : "NOT FOUND"}`
       );
-    } else {
-      console.log(
-        `🔍 [MongoDB] State not found - checking if expired or missing`
-      );
+      if (result) {
+        console.log(
+          `🔍 [MongoDB] State expires: ${new Date(result.expiresAt).toISOString()}, now: ${new Date().toISOString()}`
+        );
+        // Check if state is expired
+        if (result.expiresAt < Date.now()) {
+          console.log(`🔍 [MongoDB] State is expired, cleaning up`);
+          await this.deleteStateData(key);
+          return undefined;
+        }
+      } else {
+        console.log(
+          `🔍 [MongoDB] State not found - checking if expired or missing`
+        );
+        // Let's also check if there are any states in the database for debugging
+        const allStates = await OAuthState.find({
+          key: { $regex: "^state:" },
+        }).limit(5);
+        console.log(
+          `🔍 [MongoDB] Found ${allStates.length} states in database (showing first 5):`
+        );
+        allStates.forEach((stateDoc) => {
+          console.log(
+            `🔍 [MongoDB] - Key: ${stateDoc.key}, Expires: ${stateDoc.expiresAt.toISOString()}`
+          );
+        });
+      }
+      return result;
+    } catch (error) {
+      console.error(`🔍 [MongoDB] Error retrieving state:`, error);
+      throw error;
     }
-    return result;
   }
 
   async deleteState(state: string): Promise<void> {

@@ -84,9 +84,14 @@ router.get("/login", async (_req: Request, res: Response) => {
 
     // Generate state for CSRF protection
     const state = crypto.randomBytes(16).toString("hex");
+    console.log(`🔒 Generated state: ${state} (length: ${state.length})`);
 
     // Store PKCE verifier and state with 10-minute TTL
     const expiresAt = Date.now() + 10 * 60 * 1000;
+    console.log(
+      `🔒 Storing state with expiration: ${new Date(expiresAt).toISOString()}`
+    );
+
     await oauthStateService.setPkce(codeChallenge, { codeVerifier, expiresAt });
     await oauthStateService.setState(state, { expiresAt });
 
@@ -124,6 +129,7 @@ router.get("/callback", async (req: Request, res: Response) => {
 
     console.log("code", code);
     console.log("state", state);
+    console.log("state length", state ? (state as string).length : "undefined");
     console.log("error", error);
     console.log("error_description", error_description);
 
@@ -389,12 +395,20 @@ async function exchangeCodeForTokens(code: string): Promise<{
     headers["Authorization"] = `Basic ${credentials}`;
   }
 
+  console.log(
+    `🔑 Exchanging code for tokens using endpoint: ${endpoints.token}`
+  );
+  console.log(`🔑 Client ID: ${clientId?.substring(0, 20)}...`);
+  console.log(`🔑 Redirect URI: ${redirectUri}`);
+
   try {
     const response = await fetch(endpoints.token, {
       method: "POST",
       headers,
       body: params,
     });
+
+    console.log(`🔑 Token exchange response status: ${response.status}`);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -413,7 +427,9 @@ async function exchangeCodeForTokens(code: string): Promise<{
       }
     }
 
-    return await response.json();
+    const tokens = await response.json();
+    console.log(`🔑 Successfully exchanged code for tokens`);
+    return tokens;
   } catch (error) {
     if (error instanceof AppError) {
       throw error;
