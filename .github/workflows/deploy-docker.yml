@@ -126,10 +126,18 @@ jobs:
             exit 1
           fi
 
-      - name: Build new Docker image
+      - name: Build new Docker image with cache clearing
         run: |
-          docker build -t aeo-server:${{ github.sha }} .
+          echo "🧹 Clearing Docker build cache for fresh build..."
+
+          # Clear Docker build cache to ensure fresh builds
+          docker builder prune -f
+
+          # Build with no cache to ensure latest code changes are included
+          docker build --no-cache -t aeo-server:${{ github.sha }} .
           docker tag aeo-server:${{ github.sha }} aeo-server:latest
+
+          echo "✅ Docker image built successfully with cache cleared"
 
       - name: Check current deployment color
         id: check_color
@@ -145,8 +153,8 @@ jobs:
 
       - name: Deploy to ${{ steps.check_color.outputs.deploy_color }} environment
         run: |
-          # Deploy new version to inactive color
-          docker-compose -f docker-compose.prod.yml up -d app-${{ steps.check_color.outputs.deploy_color }}
+          # Deploy new version to inactive color with force recreate
+          docker-compose -f docker-compose.prod.yml up -d --force-recreate app-${{ steps.check_color.outputs.deploy_color }}
 
       - name: Debug container environment
         run: |
@@ -229,11 +237,19 @@ jobs:
           echo "=== Recent Logs ==="
           docker logs aeo-server-${{ steps.check_color.outputs.deploy_color }} --tail 20
 
-      - name: Cleanup old images
+      - name: Cleanup old images and cache
         if: success()
         run: |
           # Remove old unused images (keep last 3)
           docker images aeo-server --format "{{.ID}} {{.Tag}}" | grep -v "latest" | tail -n +4 | awk '{print $1}' | xargs -r docker rmi || true
+
+          # Clean up Docker system to free space
+          docker system prune -f
+
+          # Clean up build cache
+          docker builder prune -f
+
+          echo "✅ Cleanup completed"
 
       - name: Rollback on failure
         if: failure()

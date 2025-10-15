@@ -49,6 +49,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: production
+      args:
+        - BUILDKIT_INLINE_CACHE=1
     container_name: aeo-server-blue
     restart: always
     ports:
@@ -131,6 +133,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: production
+      args:
+        - BUILDKIT_INLINE_CACHE=1
     container_name: aeo-server-green
     restart: always
     ports:

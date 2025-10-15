@@ -1,0 +1,94 @@
+# =============================================================================
+# Docker Compose - Development Environment
+# =============================================================================
+# Usage: docker-compose -f docker-compose.dev.yml up
+# This provides hot reload and faster development cycles
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Node.js Application (Development Mode)
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: aeo-server-dev
+    restart: unless-stopped
+    ports:
+      - "${PORT:-5000}:5000"
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - MONGODB_URI=${MONGODB_URI}
+      - REDIS_URL=redis://aeo-redis-prod:6379/0
+      # Auth Configuration
+      - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
+      # Cognito Configuration
+      - COGNITO_REGION=${COGNITO_REGION}
+      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
+      - COGNITO_APP_CLIENT_ID=${COGNITO_APP_CLIENT_ID}
+      - COGNITO_DOMAIN=${COGNITO_DOMAIN}
+      - OAUTH_REDIRECT_URI=${OAUTH_REDIRECT_URI}
+      - OAUTH_LOGOUT_REDIRECT_URI=${OAUTH_LOGOUT_REDIRECT_URI}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - SESSION_TTL_SECONDS=${SESSION_TTL_SECONDS:-28800}
+      - COOKIE_NAME=${COOKIE_NAME:-aeo_session}
+      # OAuth Configuration
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
+      - LINKEDIN_CLIENT_ID=${LINKEDIN_CLIENT_ID}
+      - LINKEDIN_CLIENT_SECRET=${LINKEDIN_CLIENT_SECRET}
+      - LINKEDIN_REDIRECT_URI=${LINKEDIN_REDIRECT_URI}
+      # Frontend URLs
+      - CLIENT_URL=${CLIENT_URL:-https://themoda.io}
+      - FRONTEND_URL=${FRONTEND_URL:-https://themoda.io}
+      # API Keys
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - SENDGRID_FROM_EMAIL=${SENDGRID_FROM_EMAIL}
+      - SENDGRID_TEMPLATE_IDS=${SENDGRID_TEMPLATE_IDS}
+      - USE_MOCK_EMAIL=${USE_MOCK_EMAIL:-true}
+      - PAGESPEED_API_KEY=${PAGESPEED_API_KEY}
+      # AWS Configuration
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+    volumes:
+      # Mount source code for hot reload - changes will trigger rebuild
+      - ./src:/app/src
+      - ./dist:/app/dist
+      - ./package.json:/app/package.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./package-lock.json:/app/package-lock.json
+      # Prevent node_modules from being overwritten
+      - /app/node_modules
+      # Development scripts
+      - ./scripts:/app/scripts
+    networks:
+      - aeo-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  aeo-network:
+    driver: bridge

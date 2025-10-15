@@ -20,10 +20,55 @@ RUN npm ci
 COPY src ./src
 
 # Clean any previous builds and build TypeScript fresh
+# Use --noEmit false to ensure compilation happens
 RUN rm -rf dist && npm run build
 
 # -----------------------------------------------------------------------------
-# Stage 2: Production - Create minimal production image
+# Stage 2: Development - For development with hot reload
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS development
+
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Create app user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install ALL dependencies (including devDependencies for development)
+RUN npm ci
+
+# Copy TypeScript configuration
+COPY tsconfig.json ./
+
+# Create dist directory and copy built files from builder
+COPY --from=builder /app/dist ./dist
+
+# Copy scripts
+COPY scripts ./scripts
+
+# Change ownership to nodejs user
+RUN chown -R nodejs:nodejs /app
+
+# Switch to nodejs user
+USER nodejs
+
+# Expose port
+EXPOSE 5000
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start the application
+CMD ["node", "dist/index.js"]
+
+# -----------------------------------------------------------------------------
+# Stage 3: Production - Create minimal production image
 # -----------------------------------------------------------------------------
 FROM node:20-alpine AS production
 
