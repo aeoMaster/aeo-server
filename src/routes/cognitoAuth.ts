@@ -9,6 +9,7 @@ import { cognitoService } from "../services/cognitoService";
 import { configService } from "../services/configService";
 import { User } from "../models/User";
 import { SubscriptionService } from "../services/subscriptionService";
+import { oauthStateService } from "../services/oauthStateService";
 
 const router = Router();
 
@@ -43,40 +44,14 @@ const confirmForgotPasswordSchema = z.object({
   newPassword: z.string().min(8, "Password must be at least 8 characters long"),
 });
 
-// Store PKCE codes and state temporarily (in production, use Redis)
-const pkceStore = new Map<
-  string,
-  { codeVerifier: string; expiresAt: number }
->();
-const stateStore = new Map<string, { expiresAt: number }>();
-
-// Clean up expired entries every 5 minutes
-setInterval(
-  () => {
-    const now = Date.now();
-
-    // Clean PKCE store
-    for (const [key, value] of pkceStore.entries()) {
-      if (value.expiresAt < now) {
-        pkceStore.delete(key);
-      }
-    }
-
-    // Clean state store
-    for (const [key, value] of stateStore.entries()) {
-      if (value.expiresAt < now) {
-        stateStore.delete(key);
-      }
-    }
-  },
-  5 * 60 * 1000
-);
+// OAuth state and PKCE storage is now handled by oauthStateService
+// This service automatically uses Redis in production for multi-instance deployments
 
 /**
  * GET /api/auth/login
  * Builds and redirects to the Hosted UI login URL with proper validation
  */
-router.get("/login", (_req: Request, res: Response) => {
+router.get("/login", async (_req: Request, res: Response) => {
   try {
     // Validate required configuration
     const requiredConfig = [
@@ -112,8 +87,8 @@ router.get("/login", (_req: Request, res: Response) => {
 
     // Store PKCE verifier and state with 10-minute TTL
     const expiresAt = Date.now() + 10 * 60 * 1000;
-    pkceStore.set(codeChallenge, { codeVerifier, expiresAt });
-    stateStore.set(state, { expiresAt });
+    await oauthStateService.setPkce(codeChallenge, { codeVerifier, expiresAt });
+    await oauthStateService.setState(state, { expiresAt });
 
     // Build Cognito authorization URL using well-known endpoints
     const endpoints = configService.getCognitoEndpoints();
@@ -168,11 +143,11 @@ router.get("/callback", async (req: Request, res: Response) => {
     }
 
     // Validate state parameter for CSRF protection
-    const stateData = stateStore.get(state as string);
+    const stateData = await oauthStateService.getState(state as string);
     if (!stateData || stateData.expiresAt < Date.now()) {
       throw new AppError(400, "Invalid or expired state parameter");
     }
-    stateStore.delete(state as string);
+    await oauthStateService.deleteState(state as string);
 
     // Exchange code for tokens
     const tokens = await exchangeCodeForTokens(code as string);
