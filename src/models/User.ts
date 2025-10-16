@@ -37,10 +37,6 @@ const userSchema = new Schema<IUser>({
   },
   password: {
     type: String,
-    required: function (this: IUser) {
-      // Password is not required for Google OAuth or Cognito users
-      return !this.googleId && !this.cognitoSub;
-    },
     minlength: [8, "Password must be at least 8 characters long"],
     select: false,
   },
