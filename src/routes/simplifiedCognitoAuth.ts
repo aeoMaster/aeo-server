@@ -77,12 +77,12 @@ router.get("/login", async (req: Request, res: Response) => {
       ? cognitoDomain
       : `https://${cleanDomain}`;
 
-    // Use correct Cognito endpoint: /login (not /login/oauth2/authorize)
+    // Use correct Cognito endpoint: /oauth2/authorize
     const authUrl = new URL(`${baseUrl}/oauth2/authorize`);
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("client_id", clientId);
     authUrl.searchParams.set("redirect_uri", redirectUri);
-    authUrl.searchParams.set("scope", "openid+email+profile");
+    authUrl.searchParams.set("scope", "openid email profile"); // Space-separated, not + separated
     authUrl.searchParams.set("state", state);
     authUrl.searchParams.set("code_challenge", codeChallenge);
     authUrl.searchParams.set("code_challenge_method", "S256");
