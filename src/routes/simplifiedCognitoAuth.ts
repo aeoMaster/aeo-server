@@ -376,6 +376,13 @@ async function upsertUserSimple(userInfo: {
     } else {
       // Create new user
       console.log(`👤 Creating new user: ${userInfo.email}`);
+      console.log(`👤 User data:`, {
+        cognitoSub: userInfo.cognitoSub,
+        email: userInfo.email,
+        name: userInfo.name,
+        groups: userInfo.groups,
+      });
+
       user = await User.create({
         cognitoSub: userInfo.cognitoSub,
         email: userInfo.email,
@@ -387,9 +394,23 @@ async function upsertUserSimple(userInfo: {
         lastLogin: new Date(),
       });
 
+      console.log(`✅ User created successfully: ${user._id}`);
+
       // Create free tier subscription
-      await SubscriptionService.createFreeTierSubscription(user._id.toString());
-      console.log(`✅ Created subscription for user: ${user._id}`);
+      try {
+        await SubscriptionService.createFreeTierSubscription(
+          user._id.toString()
+        );
+        console.log(`✅ Created subscription for user: ${user._id}`);
+      } catch (subscriptionError) {
+        console.error("❌ Failed to create subscription:", subscriptionError);
+        // Delete the user if subscription creation fails
+        await User.findByIdAndDelete(user._id);
+        throw new AppError(
+          500,
+          "Failed to create user subscription. Please try again."
+        );
+      }
     }
 
     return user;
