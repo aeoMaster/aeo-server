@@ -82,13 +82,16 @@ router.get("/login", async (req: Request, res: Response) => {
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("client_id", clientId);
     authUrl.searchParams.set("redirect_uri", redirectUri);
-    authUrl.searchParams.set("scope", "openid email profile"); // Space-separated, not + separated
     authUrl.searchParams.set("state", state);
     authUrl.searchParams.set("code_challenge", codeChallenge);
     authUrl.searchParams.set("code_challenge_method", "S256");
 
-    console.log(`🚀 Redirecting to Cognito Hosted UI: ${authUrl.toString()}`);
-    res.redirect(authUrl.toString());
+    // Manually add scope parameter to avoid URL encoding of + characters
+    const urlString = authUrl.toString();
+    const finalUrl = urlString + "&scope=openid+email+profile";
+
+    console.log(`🚀 Redirecting to Cognito Hosted UI: ${finalUrl}`);
+    res.redirect(finalUrl);
   } catch (error) {
     console.error("Login error:", error);
     throw new AppError(500, "Failed to initiate login");
