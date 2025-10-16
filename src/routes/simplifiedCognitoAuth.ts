@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-// import crypto from "crypto";
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { AppError } from "../middleware/errorHandler";
 import { configService } from "../services/configService";
@@ -8,21 +8,30 @@ import { SubscriptionService } from "../services/subscriptionService";
 
 const router = Router();
 
+// Extend Express session interface for PKCE
+declare module "express-session" {
+  interface SessionData {
+    pkceVerifier?: string;
+    oauthState?: string;
+    stateExpiry?: number;
+  }
+}
+
 /**
- * SIMPLIFIED COGNITO AUTH FLOW
+ * FIXED COGNITO AUTH FLOW
  *
  * This approach:
- * 1. Uses Cognito's built-in session management
- * 2. Eliminates complex state management
- * 3. Uses simple redirect-based flow
+ * 1. Uses correct Cognito Hosted UI endpoint (/login)
+ * 2. Implements PKCE for security
+ * 3. Uses session-based state management
  * 4. Handles user creation/subscription in callback
  */
 
 /**
  * GET /api/auth/login
- * Simple redirect to Cognito Hosted UI
+ * Redirect to Cognito Hosted UI with PKCE
  */
-router.get("/login", async (_req: Request, res: Response) => {
+router.get("/login", async (req: Request, res: Response) => {
   try {
     const requiredConfig = [
       "COGNITO_REGION",
@@ -42,7 +51,22 @@ router.get("/login", async (_req: Request, res: Response) => {
     const redirectUri = configService.get("OAUTH_REDIRECT_URI");
     const clientId = configService.get("COGNITO_APP_CLIENT_ID");
 
-    // Simple Cognito Hosted UI URL - no complex PKCE or state management
+    // Generate PKCE parameters
+    const codeVerifier = crypto.randomBytes(32).toString("base64url");
+    const codeChallenge = crypto
+      .createHash("sha256")
+      .update(codeVerifier)
+      .digest("base64url");
+
+    // Generate state for CSRF protection
+    const state = crypto.randomBytes(16).toString("hex");
+
+    // Store PKCE verifier and state in session
+    req.session.pkceVerifier = codeVerifier;
+    req.session.oauthState = state;
+    req.session.stateExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    // Build correct Cognito Hosted UI URL
     const cognitoDomain = configService.get("COGNITO_DOMAIN");
     let cleanDomain = cognitoDomain;
     if (cognitoDomain.startsWith("https://")) {
@@ -53,13 +77,17 @@ router.get("/login", async (_req: Request, res: Response) => {
       ? cognitoDomain
       : `https://${cleanDomain}`;
 
+    // Use correct Cognito endpoint: /login (not /login/oauth2/authorize)
     const authUrl = new URL(`${baseUrl}/login`);
-    authUrl.searchParams.set("client_id", clientId);
     authUrl.searchParams.set("response_type", "code");
-    authUrl.searchParams.set("scope", "openid+email+profile");
+    authUrl.searchParams.set("client_id", clientId);
     authUrl.searchParams.set("redirect_uri", redirectUri);
+    authUrl.searchParams.set("scope", "openid email profile");
+    authUrl.searchParams.set("state", state);
+    authUrl.searchParams.set("code_challenge", codeChallenge);
+    authUrl.searchParams.set("code_challenge_method", "S256");
 
-    console.log(`🚀 Redirecting to Cognito: ${authUrl.toString()}`);
+    console.log(`🚀 Redirecting to Cognito Hosted UI: ${authUrl.toString()}`);
     res.redirect(authUrl.toString());
   } catch (error) {
     console.error("Login error:", error);
@@ -73,9 +101,9 @@ router.get("/login", async (_req: Request, res: Response) => {
  */
 router.get("/callback", async (req: Request, res: Response) => {
   try {
-    const { code, error, error_description } = req.query;
+    const { code, state, error, error_description } = req.query;
 
-    console.log("🔑 Callback received:", { code: !!code, error });
+    console.log("🔑 Callback received:", { code: !!code, state, error });
 
     // Handle OAuth errors
     if (error) {
@@ -88,12 +116,35 @@ router.get("/callback", async (req: Request, res: Response) => {
       return;
     }
 
-    if (!code) {
-      throw new AppError(400, "Missing authorization code");
+    if (!code || !state) {
+      throw new AppError(400, "Missing authorization code or state parameter");
     }
 
-    // Exchange code for tokens (simplified - no PKCE)
-    const tokens = await exchangeCodeForTokensSimple(code as string);
+    // Validate state parameter for CSRF protection
+    if (!req.session.oauthState || req.session.oauthState !== state) {
+      throw new AppError(400, "Invalid state parameter");
+    }
+
+    if (!req.session.stateExpiry || req.session.stateExpiry < Date.now()) {
+      throw new AppError(400, "State parameter expired");
+    }
+
+    // Get PKCE verifier from session
+    const codeVerifier = req.session.pkceVerifier;
+    if (!codeVerifier) {
+      throw new AppError(400, "Missing PKCE verifier");
+    }
+
+    // Clear session state
+    delete req.session.oauthState;
+    delete req.session.stateExpiry;
+    delete req.session.pkceVerifier;
+
+    // Exchange code for tokens with PKCE
+    const tokens = await exchangeCodeForTokensWithPkce(
+      code as string,
+      codeVerifier
+    );
     console.log("🔑 Tokens received:", Object.keys(tokens));
 
     // Verify and decode ID token
@@ -218,9 +269,12 @@ router.get("/me", async (req: Request, res: Response) => {
 });
 
 /**
- * Simplified token exchange - no PKCE needed for server-side apps
+ * Token exchange with PKCE
  */
-async function exchangeCodeForTokensSimple(code: string): Promise<any> {
+async function exchangeCodeForTokensWithPkce(
+  code: string,
+  codeVerifier: string
+): Promise<any> {
   const cognitoDomain = configService.get("COGNITO_DOMAIN");
   const clientId = configService.get("COGNITO_APP_CLIENT_ID");
   const clientSecret = configService.get("COGNITO_APP_CLIENT_SECRET");
@@ -241,6 +295,7 @@ async function exchangeCodeForTokensSimple(code: string): Promise<any> {
     client_id: clientId,
     code: code,
     redirect_uri: redirectUri,
+    code_verifier: codeVerifier, // Add PKCE verifier
   });
 
   const headers: { [key: string]: string } = {
