@@ -26,10 +26,18 @@ class MongoSessionStore extends session.Store {
     callback: (err: any, session?: session.SessionData | null) => void
   ) {
     try {
+      console.log("🔍 MongoSessionStore get:", { sessionId });
       const doc = await Session.findById(sessionId);
       if (doc) {
+        console.log("✅ Session found:", {
+          sessionId,
+          hasOauthState: !!doc.session?.oauthState,
+          oauthState: doc.session?.oauthState,
+          stateExpiry: doc.session?.stateExpiry,
+        });
         callback(null, doc.session);
       } else {
+        console.log("❌ Session not found:", { sessionId });
         callback(null, null);
       }
     } catch (error) {
@@ -44,6 +52,12 @@ class MongoSessionStore extends session.Store {
     callback?: (err?: any) => void
   ) {
     try {
+      console.log("💾 MongoSessionStore set:", {
+        sessionId,
+        hasOauthState: !!session?.oauthState,
+        oauthState: session?.oauthState,
+        stateExpiry: session?.stateExpiry,
+      });
       await Session.findByIdAndUpdate(
         sessionId,
         {
@@ -52,6 +66,7 @@ class MongoSessionStore extends session.Store {
         },
         { upsert: true }
       );
+      console.log("✅ Session saved successfully:", { sessionId });
       callback?.();
     } catch (error) {
       console.error("MongoSessionStore set error:", error);
@@ -102,13 +117,13 @@ class SessionService {
       secret: this.sessionSecret,
       name: process.env.COOKIE_NAME || "aeo_session",
       resave: false,
-      saveUninitialized: false,
+      saveUninitialized: true, // Allow saving uninitialized sessions for OAuth state
       rolling: true, // Reset expiration on each request
       proxy: true, // Trust proxy for accurate IP detection
       cookie: {
         secure: process.env.NODE_ENV === "production", // HTTPS in production
         httpOnly: true,
-        sameSite: process.env.NODE_ENV === "production" ? "lax" : "strict", // Lax for production cross-site
+        sameSite: "lax", // Use lax for OAuth redirects
         maxAge: this.sessionTtl * 1000, // Convert to milliseconds
         domain: process.env.COOKIE_DOMAIN || undefined, // Set domain for multi-container consistency
       },

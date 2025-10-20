@@ -66,6 +66,26 @@ router.get("/login", async (req: Request, res: Response) => {
     req.session.oauthState = state;
     req.session.stateExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
 
+    // Explicitly save the session to ensure it's persisted
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) {
+          console.error("❌ Failed to save session:", err);
+          reject(err);
+        } else {
+          console.log("✅ Session saved successfully");
+          resolve();
+        }
+      });
+    });
+
+    console.log("🔐 Session state stored:", {
+      sessionId: req.sessionID,
+      oauthState: state,
+      stateExpiry: req.session.stateExpiry,
+      hasSession: !!req.session,
+    });
+
     // Build correct Cognito Hosted UI URL
     const cognitoDomain = configService.get("COGNITO_DOMAIN");
     let cleanDomain = cognitoDomain;
@@ -107,6 +127,18 @@ router.get("/callback", async (req: Request, res: Response) => {
     const { code, state, error, error_description } = req.query;
 
     console.log("🔑 Callback received:", { code: !!code, state, error });
+    console.log("🔐 Session state check:", {
+      sessionId: req.sessionID,
+      hasSession: !!req.session,
+      storedState: req.session?.oauthState,
+      receivedState: state,
+      stateMatch: req.session?.oauthState === state,
+      stateExpiry: req.session?.stateExpiry,
+      currentTime: Date.now(),
+      isExpired: req.session?.stateExpiry
+        ? req.session.stateExpiry < Date.now()
+        : "no expiry",
+    });
 
     // Handle OAuth errors
     if (error) {
@@ -125,6 +157,11 @@ router.get("/callback", async (req: Request, res: Response) => {
 
     // Validate state parameter for CSRF protection
     if (!req.session.oauthState || req.session.oauthState !== state) {
+      console.error("❌ State validation failed:", {
+        storedState: req.session?.oauthState,
+        receivedState: state,
+        sessionExists: !!req.session,
+      });
       throw new AppError(400, "Invalid state parameter");
     }
 

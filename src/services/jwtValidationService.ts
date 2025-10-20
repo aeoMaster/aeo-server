@@ -43,6 +43,11 @@ class JwtValidationService {
     this.userPoolId = process.env.COGNITO_USER_POOL_ID!;
     this.appClientId = process.env.COGNITO_APP_CLIENT_ID!;
 
+    console.log("🔐 Cognito configuration:", {
+      region: this.region,
+      userPoolId: this.userPoolId,
+      appClientId: this.appClientId,
+    });
     if (!this.userPoolId || !this.appClientId) {
       throw new Error("Missing required Cognito configuration");
     }

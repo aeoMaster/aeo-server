@@ -41,7 +41,13 @@ router.post("/signup", async (req, res, next) => {
     }
 
     // Create new user
-    const user = (await User.create({ name, email, password })) as IUser;
+    const user = (await User.create({
+      name,
+      email,
+      password,
+      roles: ["user"],
+      cognitoGroups: [],
+    })) as IUser;
 
     if (!user._id) {
       throw new AppError(500, "User ID not found");
