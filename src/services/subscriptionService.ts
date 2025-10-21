@@ -441,7 +441,7 @@ export class SubscriptionService {
       console.log("Created subscription record:", subscription);
 
       console.log("Creating usage records...");
-      // Initialize usage tracking for all types
+      // Initialize usage tracking for all types using package limits
       const usageTypes = [
         "analysis",
         "clarity_scan",
@@ -449,9 +449,21 @@ export class SubscriptionService {
         "storage",
       ] as const;
       const usageLimits = {
-        analysis: { total: 2, used: 0, remaining: 2 },
-        clarity_scan: { total: 5, used: 0, remaining: 5 },
-        chat_message: { total: 0, used: 0, remaining: 0 },
+        analysis: {
+          total: freePackage.features.maxAnalyses,
+          used: 0,
+          remaining: freePackage.features.maxAnalyses,
+        },
+        clarity_scan: {
+          total: freePackage.features.maxClarityScans,
+          used: 0,
+          remaining: freePackage.features.maxClarityScans,
+        },
+        chat_message: {
+          total: freePackage.features.maxChatMessages,
+          used: 0,
+          remaining: freePackage.features.maxChatMessages,
+        },
         storage: { total: 100, used: 0, remaining: 100 },
       };
 

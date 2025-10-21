@@ -124,7 +124,7 @@ export const csrfProtection = (
  */
 export const authRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 requests per windowMs
+  max: process.env.NODE_ENV === "development" ? 10000 : 150, // Much higher limit for development
   message: {
     status: "error",
     message: "Too many authentication attempts, please try again later.",
@@ -132,8 +132,13 @@ export const authRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // Skip rate limiting for health checks
-    return req.path === "/health" || req.path === "/api/health";
+    // Skip rate limiting for health checks and frequently called endpoints
+    return (
+      req.path === "/health" ||
+      req.path === "/api/health" ||
+      req.path === "/api/auth/me" || // Exclude /me from rate limiting
+      process.env.NODE_ENV === "development" // Skip all rate limiting in development
+    );
   },
 });
 
@@ -142,7 +147,7 @@ export const authRateLimit = rateLimit({
  */
 export const passwordResetRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // Limit each IP to 3 password reset attempts per hour
+  max: 150, // Limit each IP to 3 password reset attempts per hour
   message: {
     status: "error",
     message: "Too many password reset attempts, please try again later.",
@@ -156,7 +161,7 @@ export const passwordResetRateLimit = rateLimit({
  */
 export const apiRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: process.env.NODE_ENV === "development" ? 10000 : 100, // Much higher limit for development
   message: {
     status: "error",
     message: "Too many requests, please try again later.",
@@ -164,11 +169,13 @@ export const apiRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // Skip rate limiting for health checks and auth callback
+    // Skip rate limiting for health checks, auth callback, and frequently called endpoints
     return (
       req.path === "/health" ||
       req.path === "/api/health" ||
-      req.path === "/api/auth/callback"
+      req.path === "/api/auth/callback" ||
+      req.path === "/api/auth/me" || // Exclude /me from rate limiting
+      process.env.NODE_ENV === "development" // Skip all rate limiting in development
     );
   },
 });

@@ -311,47 +311,44 @@ export class UsageService {
       console.log("🔍 Cleanup completed");
     }
 
-    // Also clean up any usage records with 0 totals in current period
-    const zeroTotalRecords = usageDocs.filter((doc) => doc.limits.total === 0);
-    if (zeroTotalRecords.length > 0) {
-      console.log(
-        `🔍 Found ${zeroTotalRecords.length} records with 0 totals, cleaning them up...`
-      );
-      const zeroTotalIds = zeroTotalRecords.map((doc) => doc._id);
-      await Usage.deleteMany({ _id: { $in: zeroTotalIds } });
-      console.log("🔍 Zero total records cleaned up");
-
-      // Refresh the usage docs after cleanup
-      usageDocs = await Usage.find({
-        ...usageIdentifier,
-        "period.end": { $gt: new Date() },
-      }).sort({ updatedAt: -1 });
-    }
+    // Note: We now keep usage records with 0 totals (for disabled features)
+    // so frontend knows the feature exists but is disabled
 
     let usageData = this.formatUsage(usageDocs);
     console.log("🔍 Formatted usage data:", usageData);
 
-    // Add members tracking for companies
-    if (companyId) {
-      const memberCount = await User.countDocuments({ company: companyId });
-      const ownerId = (
-        await Company.findById(companyId).select("owner").lean()
-      )?.owner?.toString();
+    // Add members tracking for companies and individual users
+    const ownerId = companyId
+      ? (
+          await Company.findById(companyId).select("owner").lean()
+        )?.owner?.toString()
+      : userId;
 
-      if (ownerId) {
-        const subscription = await Subscription.findOne({
-          user: ownerId,
-          status: { $in: ["active", "trial"] },
-        })
-          .populate("package")
-          .lean();
+    if (ownerId) {
+      const subscription = await Subscription.findOne({
+        user: ownerId,
+        status: { $in: ["active", "trial"] },
+      })
+        .populate("package")
+        .lean();
 
-        if (subscription && subscription.package) {
-          const maxUsers =
-            (subscription.package as IPackage).features.maxUsers ?? 1;
+      if (subscription && subscription.package) {
+        const maxUsers =
+          (subscription.package as IPackage).features.maxUsers ?? 1;
+
+        if (companyId) {
+          // For companies, count actual members
+          const memberCount = await User.countDocuments({ company: companyId });
           usageData.members = {
             used: memberCount,
             remaining: maxUsers < 0 ? -1 : Math.max(0, maxUsers - memberCount),
+            total: maxUsers,
+          };
+        } else {
+          // For individual users, they count as 1 member
+          usageData.members = {
+            used: 1,
+            remaining: Math.max(0, maxUsers - 1),
             total: maxUsers,
           };
         }
@@ -514,22 +511,19 @@ export class UsageService {
           break;
       }
 
-      if (total > 0) {
-        const newUsage = await Usage.create({
-          user: companyId ? undefined : userId,
-          company: companyId,
-          type: type,
-          period,
-          limits: { total, used: 0, remaining: total },
-          count: 0,
-        });
-        newUsageDocs.push(newUsage);
-        console.log(
-          `✅ Created missing usage record for ${type}: total=${total}`
-        );
-      } else {
-        console.log(`⚠️ Skipping ${type} - no limit defined in package`);
-      }
+      // Create usage record even if total is 0 (for disabled features)
+      const newUsage = await Usage.create({
+        user: companyId ? undefined : userId,
+        company: companyId,
+        type: type,
+        period,
+        limits: { total, used: 0, remaining: total },
+        count: 0,
+      });
+      newUsageDocs.push(newUsage);
+      console.log(
+        `✅ Created missing usage record for ${type}: total=${total}`
+      );
     }
 
     // Format and return the newly created usage data
