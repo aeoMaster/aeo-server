@@ -199,6 +199,10 @@ router.get("/callback", async (req: Request, res: Response) => {
       { expiresIn: "7d" }
     );
 
+    console.log(
+      `🔑 Generated session token: ${sessionToken.substring(0, 50)}...`
+    );
+
     // Redirect to frontend with session
     const frontendUrl =
       configService.get("FRONTEND_ORIGIN") || "https://www.themoda.io";
@@ -211,6 +215,9 @@ router.get("/callback", async (req: Request, res: Response) => {
       sameSite: "lax",
     });
 
+    console.log(
+      `🍪 Cookie set: aeo_session=${sessionToken.substring(0, 20)}...`
+    );
     console.log("✅ Authentication successful for user:", user.email);
     res.redirect(`${frontendUrl}/dashboard?auth=success`);
   } catch (error) {
@@ -284,28 +291,58 @@ router.post("/logout", (_req: Request, res: Response) => {
 router.get("/me", async (req: Request, res: Response) => {
   try {
     let token = null;
+    let authMethod = "";
 
     // Check Authorization header first (Bearer token)
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
       token = authHeader.substring(7);
+      authMethod = "Bearer";
     }
     // If no Authorization header, check session cookie
     else if (req.cookies?.aeo_session) {
       token = req.cookies.aeo_session;
+      authMethod = "Cookie";
     }
 
+    console.log(
+      `🔍 Auth attempt: method=${authMethod}, token=${token ? token.substring(0, 20) + "..." : "none"}`
+    );
+
     if (!token) {
+      console.log("❌ No token found in request");
       throw new AppError(401, "Not authenticated");
     }
 
+    // Check if token is malformed (not a proper JWT format)
+    if (!token.includes(".") || token.split(".").length !== 3) {
+      console.log(`❌ Malformed token detected: ${token.substring(0, 50)}...`);
+
+      // Special case: if client is sending literal "token" string, provide helpful error
+      if (token === "token") {
+        console.log(
+          "💡 Client is sending literal 'token' string instead of actual JWT"
+        );
+        throw new AppError(
+          401,
+          "Invalid token: client is sending literal 'token' string instead of actual JWT token"
+        );
+      }
+
+      throw new AppError(401, "Invalid token format");
+    }
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
+    console.log(`✅ Token verified for user: ${decoded.email || decoded.id}`);
+
     const user = await User.findById(decoded.id);
 
     if (!user || user.status !== "active") {
+      console.log(`❌ User not found or inactive: ${decoded.id}`);
       throw new AppError(401, "User not found or inactive");
     }
 
+    console.log(`✅ User authenticated: ${user.email}`);
     res.json({
       status: "success",
       user: {
@@ -318,6 +355,10 @@ router.get("/me", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Get user error:", error);
+    if (error instanceof jwt.JsonWebTokenError) {
+      console.error("JWT Error details:", error.message);
+      throw new AppError(401, "Invalid token");
+    }
     throw new AppError(401, "Not authenticated");
   }
 });
