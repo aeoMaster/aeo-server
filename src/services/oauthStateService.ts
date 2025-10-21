@@ -17,6 +17,7 @@ export interface IPkceData {
 
 export interface IStateData {
   expiresAt: number;
+  codeChallenge?: string;
 }
 
 export interface IOAuthStateService {

@@ -5,17 +5,9 @@ import { AppError } from "../middleware/errorHandler";
 import { configService } from "../services/configService";
 import { User } from "../models/User";
 import { SubscriptionService } from "../services/subscriptionService";
+import { oauthStateService } from "../services/oauthStateService";
 
 const router = Router();
-
-// Extend Express session interface for PKCE
-declare module "express-session" {
-  interface SessionData {
-    pkceVerifier?: string;
-    oauthState?: string;
-    stateExpiry?: number;
-  }
-}
 
 /**
  * FIXED COGNITO AUTH FLOW
@@ -31,7 +23,7 @@ declare module "express-session" {
  * GET /api/auth/login
  * Redirect to Cognito Hosted UI with PKCE
  */
-router.get("/login", async (req: Request, res: Response) => {
+router.get("/login", async (_req: Request, res: Response) => {
   try {
     const requiredConfig = [
       "COGNITO_REGION",
@@ -60,30 +52,21 @@ router.get("/login", async (req: Request, res: Response) => {
 
     // Generate state for CSRF protection
     const state = crypto.randomBytes(16).toString("hex");
+    console.log(`🔒 Generated state: ${state} (length: ${state.length})`);
 
-    // Store PKCE verifier and state in session
-    req.session.pkceVerifier = codeVerifier;
-    req.session.oauthState = state;
-    req.session.stateExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+    // Store PKCE verifier and state with 10-minute TTL using MongoDB
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+    console.log(
+      `🔒 Storing state with expiration: ${new Date(expiresAt).toISOString()}`
+    );
 
-    // Explicitly save the session to ensure it's persisted
-    await new Promise<void>((resolve, reject) => {
-      req.session.save((err) => {
-        if (err) {
-          console.error("❌ Failed to save session:", err);
-          reject(err);
-        } else {
-          console.log("✅ Session saved successfully");
-          resolve();
-        }
-      });
-    });
+    await oauthStateService.setPkce(codeChallenge, { codeVerifier, expiresAt });
+    await oauthStateService.setState(state, { expiresAt, codeChallenge });
 
-    console.log("🔐 Session state stored:", {
-      sessionId: req.sessionID,
+    console.log("🔐 State stored in MongoDB:", {
       oauthState: state,
-      stateExpiry: req.session.stateExpiry,
-      hasSession: !!req.session,
+      stateExpiry: expiresAt,
+      codeChallenge: codeChallenge.substring(0, 8) + "...",
     });
 
     // Build correct Cognito Hosted UI URL
@@ -127,18 +110,6 @@ router.get("/callback", async (req: Request, res: Response) => {
     const { code, state, error, error_description } = req.query;
 
     console.log("🔑 Callback received:", { code: !!code, state, error });
-    console.log("🔐 Session state check:", {
-      sessionId: req.sessionID,
-      hasSession: !!req.session,
-      storedState: req.session?.oauthState,
-      receivedState: state,
-      stateMatch: req.session?.oauthState === state,
-      stateExpiry: req.session?.stateExpiry,
-      currentTime: Date.now(),
-      isExpired: req.session?.stateExpiry
-        ? req.session.stateExpiry < Date.now()
-        : "no expiry",
-    });
 
     // Handle OAuth errors
     if (error) {
@@ -155,30 +126,35 @@ router.get("/callback", async (req: Request, res: Response) => {
       throw new AppError(400, "Missing authorization code or state parameter");
     }
 
-    // Validate state parameter for CSRF protection
-    if (!req.session.oauthState || req.session.oauthState !== state) {
+    // Validate state parameter for CSRF protection using MongoDB
+    const stateData = await oauthStateService.getState(state as string);
+    if (!stateData || stateData.expiresAt < Date.now()) {
       console.error("❌ State validation failed:", {
-        storedState: req.session?.oauthState,
         receivedState: state,
-        sessionExists: !!req.session,
+        stateData: stateData ? "found but expired" : "not found",
+        currentTime: Date.now(),
+        expiryTime: stateData?.expiresAt,
       });
-      throw new AppError(400, "Invalid state parameter");
+      throw new AppError(400, "Invalid or expired state parameter");
     }
 
-    if (!req.session.stateExpiry || req.session.stateExpiry < Date.now()) {
-      throw new AppError(400, "State parameter expired");
+    // Clean up the used state
+    await oauthStateService.deleteState(state as string);
+
+    // Get PKCE verifier from MongoDB using code challenge stored in state
+    if (!stateData.codeChallenge) {
+      throw new AppError(400, "Missing code challenge in state");
     }
 
-    // Get PKCE verifier from session
-    const codeVerifier = req.session.pkceVerifier;
-    if (!codeVerifier) {
+    const pkceData = await oauthStateService.getPkce(stateData.codeChallenge);
+    if (!pkceData) {
       throw new AppError(400, "Missing PKCE verifier");
     }
 
-    // Clear session state
-    delete req.session.oauthState;
-    delete req.session.stateExpiry;
-    delete req.session.pkceVerifier;
+    const codeVerifier = pkceData.codeVerifier;
+
+    // Clean up the used PKCE data
+    await oauthStateService.deletePkce(stateData.codeChallenge);
 
     // Exchange code for tokens with PKCE
     const tokens = await exchangeCodeForTokensWithPkce(

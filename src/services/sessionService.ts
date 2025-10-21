@@ -2,6 +2,14 @@ import session from "express-session";
 import { v4 as uuidv4 } from "uuid";
 import { Session } from "../models";
 
+// Extend Express session interface
+declare module "express-session" {
+  interface SessionData {
+    sessionId?: string;
+    userData?: ISessionData;
+  }
+}
+
 export interface ISessionData {
   sessionId: string;
   userId: string;
@@ -31,9 +39,7 @@ class MongoSessionStore extends session.Store {
       if (doc) {
         console.log("✅ Session found:", {
           sessionId,
-          hasOauthState: !!doc.session?.oauthState,
-          oauthState: doc.session?.oauthState,
-          stateExpiry: doc.session?.stateExpiry,
+          hasUserData: !!doc.session?.userData,
         });
         callback(null, doc.session);
       } else {
@@ -54,9 +60,7 @@ class MongoSessionStore extends session.Store {
     try {
       console.log("💾 MongoSessionStore set:", {
         sessionId,
-        hasOauthState: !!session?.oauthState,
-        oauthState: session?.oauthState,
-        stateExpiry: session?.stateExpiry,
+        hasUserData: !!session?.userData,
       });
       await Session.findByIdAndUpdate(
         sessionId,
