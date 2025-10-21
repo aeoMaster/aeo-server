@@ -138,29 +138,39 @@ router.get("/callback", async (req: Request, res: Response) => {
       throw new AppError(400, "Invalid or expired state parameter");
     }
 
+    console.log("✅ State validation successful:", {
+      state: state,
+      hasCodeChallenge: !!stateData.codeChallenge,
+      expiresAt: new Date(stateData.expiresAt).toISOString(),
+    });
+
     // Clean up the used state
     await oauthStateService.deleteState(state as string);
 
-    // Get PKCE verifier from MongoDB using code challenge stored in state
-    if (!stateData.codeChallenge) {
-      throw new AppError(400, "Missing code challenge in state");
+    // Handle PKCE - check if codeChallenge is stored in state (simplified flow)
+    let tokens;
+    if (stateData.codeChallenge) {
+      // Simplified flow: get PKCE verifier from MongoDB using code challenge stored in state
+      const pkceData = await oauthStateService.getPkce(stateData.codeChallenge);
+      if (!pkceData) {
+        throw new AppError(400, "Missing PKCE verifier");
+      }
+
+      const codeVerifier = pkceData.codeVerifier;
+
+      // Clean up the used PKCE data
+      await oauthStateService.deletePkce(stateData.codeChallenge);
+
+      // Exchange code for tokens with PKCE
+      tokens = await exchangeCodeForTokensWithPkce(
+        code as string,
+        codeVerifier
+      );
+    } else {
+      // Legacy flow: exchange code for tokens without PKCE (fallback for compatibility)
+      console.log("🔄 Using legacy token exchange (no PKCE)");
+      tokens = await exchangeCodeForTokens(code as string);
     }
-
-    const pkceData = await oauthStateService.getPkce(stateData.codeChallenge);
-    if (!pkceData) {
-      throw new AppError(400, "Missing PKCE verifier");
-    }
-
-    const codeVerifier = pkceData.codeVerifier;
-
-    // Clean up the used PKCE data
-    await oauthStateService.deletePkce(stateData.codeChallenge);
-
-    // Exchange code for tokens with PKCE
-    const tokens = await exchangeCodeForTokensWithPkce(
-      code as string,
-      codeVerifier
-    );
     console.log("🔑 Tokens received:", Object.keys(tokens));
 
     // Verify and decode ID token
@@ -283,6 +293,84 @@ router.get("/me", async (req: Request, res: Response) => {
     throw new AppError(401, "Not authenticated");
   }
 });
+
+/**
+ * Exchange authorization code for tokens (legacy method without PKCE)
+ */
+async function exchangeCodeForTokens(code: string): Promise<{
+  access_token: string;
+  id_token: string;
+  refresh_token: string;
+}> {
+  const endpoints = configService.getCognitoEndpoints();
+  const clientId = configService.get("COGNITO_APP_CLIENT_ID");
+  const clientSecret = configService.get("COGNITO_APP_CLIENT_SECRET");
+  const redirectUri = configService.get("OAUTH_REDIRECT_URI");
+
+  // Prepare token request parameters
+  const params = new URLSearchParams({
+    grant_type: "authorization_code",
+    client_id: clientId,
+    code: code,
+    redirect_uri: redirectUri,
+  });
+
+  // Prepare headers
+  const headers: { [key: string]: string } = {
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+
+  // Add client secret if configured (for confidential clients)
+  if (clientSecret) {
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString(
+      "base64"
+    );
+    headers["Authorization"] = `Basic ${credentials}`;
+  }
+
+  console.log(
+    `🔑 Exchanging code for tokens using endpoint: ${endpoints.token}`
+  );
+  console.log(`🔑 Client ID: ${clientId?.substring(0, 20)}...`);
+  console.log(`🔑 Redirect URI: ${redirectUri}`);
+
+  try {
+    const response = await fetch(endpoints.token, {
+      method: "POST",
+      headers,
+      body: params,
+    });
+
+    console.log(`🔑 Token exchange response status: ${response.status}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Token exchange error:", errorText);
+
+      // Provide structured error responses
+      if (response.status === 400) {
+        throw new AppError(
+          400,
+          "Invalid authorization code or redirect URI mismatch"
+        );
+      } else if (response.status === 401) {
+        throw new AppError(401, "Invalid client credentials");
+      } else {
+        throw new AppError(400, "Failed to exchange code for tokens");
+      }
+    }
+
+    const tokens = await response.json();
+    console.log(`🔑 Successfully exchanged code for tokens`);
+    return tokens;
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+    console.error("Network error during token exchange:", error);
+    throw new AppError(500, "Network error during authentication");
+  }
+}
 
 /**
  * Token exchange with PKCE
