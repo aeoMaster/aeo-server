@@ -228,6 +228,7 @@ router.get("/callback", async (req: Request, res: Response) => {
 /**
  * GET /api/auth/logout
  * Clear session and redirect to Cognito logout
+ * Supports both Cognito session cookies and legacy bearer tokens
  */
 router.get("/logout", async (_req: Request, res: Response) => {
   try {
@@ -244,8 +245,9 @@ router.get("/logout", async (_req: Request, res: Response) => {
       ? cognitoDomain
       : `https://${cleanDomain}`;
 
-    // Clear session cookie
+    // Clear both session cookies (for Cognito) and legacy token cookies
     res.clearCookie("aeo_session");
+    res.clearCookie("token");
 
     // Redirect to Cognito logout
     const logoutUrl = `${baseUrl}/logout?client_id=${clientId}&logout_uri=${encodeURIComponent(frontendUrl)}`;
@@ -260,12 +262,38 @@ router.get("/logout", async (_req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/auth/logout
+ * Clear session cookies (for API calls)
+ */
+router.post("/logout", (_req: Request, res: Response) => {
+  // Clear both session cookies (for Cognito) and legacy token cookies
+  res.clearCookie("aeo_session");
+  res.clearCookie("token");
+
+  res.json({
+    status: "success",
+    message: "Logged out successfully",
+  });
+});
+
+/**
  * GET /api/auth/me
- * Get current user from session
+ * Get current user from session or bearer token
+ * Supports both Cognito session cookies and legacy bearer tokens
  */
 router.get("/me", async (req: Request, res: Response) => {
   try {
-    const token = req.cookies.aeo_session;
+    let token = null;
+
+    // Check Authorization header first (Bearer token)
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.substring(7);
+    }
+    // If no Authorization header, check session cookie
+    else if (req.cookies?.aeo_session) {
+      token = req.cookies.aeo_session;
+    }
 
     if (!token) {
       throw new AppError(401, "Not authenticated");
