@@ -141,6 +141,7 @@ class SessionService {
   async createSession(
     req: any,
     userData: {
+      userId: string;
       cognitoSub: string;
       email: string;
       name?: string;
@@ -153,7 +154,7 @@ class SessionService {
 
     const sessionData: ISessionData = {
       sessionId,
-      userId: userData.cognitoSub,
+      userId: userData.userId,
       cognitoSub: userData.cognitoSub,
       email: userData.email,
       name: userData.name,

@@ -188,36 +188,31 @@ router.get("/callback", async (req: Request, res: Response) => {
     // Create or update user
     const user = await upsertUserSimple(userInfo);
 
-    // Create session token
-    const sessionToken = jwt.sign(
-      {
-        id: user._id,
-        email: user.email,
-        cognitoSub: user.cognitoSub,
-      },
-      process.env.JWT_SECRET as string,
-      { expiresIn: "7d" }
-    );
+    // Create proper session using session service
+    const { sessionService } = await import("../services/sessionService");
 
-    console.log(
-      `🔑 Generated session token: ${sessionToken.substring(0, 50)}...`
+    // Map Cognito groups to application roles
+    const { roleMappingService } = await import(
+      "../services/roleMappingService"
     );
+    const userRoles = roleMappingService.mapGroupsToRoles(userInfo.groups);
+
+    // Create session with correct user ID
+    const sessionId = await sessionService.createSession(req, {
+      userId: user._id.toString(),
+      cognitoSub: user.cognitoSub,
+      email: user.email,
+      name: user.name,
+      roles: userRoles.roles,
+      groups: userInfo.groups,
+    });
+
+    console.log(`🔑 Created session: ${sessionId}`);
 
     // Redirect to frontend with session
     const frontendUrl =
       configService.get("FRONTEND_ORIGIN") || "https://www.themoda.io";
 
-    // Set session cookie and redirect
-    res.cookie("aeo_session", sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      sameSite: "lax",
-    });
-
-    console.log(
-      `🍪 Cookie set: aeo_session=${sessionToken.substring(0, 20)}...`
-    );
     console.log("✅ Authentication successful for user:", user.email);
     res.redirect(`${frontendUrl}/dashboard?auth=success`);
   } catch (error) {
@@ -285,60 +280,31 @@ router.post("/logout", (_req: Request, res: Response) => {
 
 /**
  * GET /api/auth/me
- * Get current user from session or bearer token
- * Supports both Cognito session cookies and legacy bearer tokens
+ * Get current user from session
+ * Uses session-based authentication for Cognito flow
  */
 router.get("/me", async (req: Request, res: Response) => {
   try {
-    let token = null;
-    let authMethod = "";
+    console.log("🔍 Session-based auth attempt for /me endpoint");
 
-    // Check Authorization header first (Bearer token)
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      token = authHeader.substring(7);
-      authMethod = "Bearer";
-    }
-    // If no Authorization header, check session cookie
-    else if (req.cookies?.aeo_session) {
-      token = req.cookies.aeo_session;
-      authMethod = "Cookie";
-    }
+    // Import session service
+    const { sessionService } = await import("../services/sessionService");
 
-    console.log(
-      `🔍 Auth attempt: method=${authMethod}, token=${token ? token.substring(0, 20) + "..." : "none"}`
-    );
+    // Get session data
+    const sessionData = sessionService.getSessionData(req);
 
-    if (!token) {
-      console.log("❌ No token found in request");
+    if (!sessionData) {
+      console.log("❌ No session data found");
       throw new AppError(401, "Not authenticated");
     }
 
-    // Check if token is malformed (not a proper JWT format)
-    if (!token.includes(".") || token.split(".").length !== 3) {
-      console.log(`❌ Malformed token detected: ${token.substring(0, 50)}...`);
+    console.log(`✅ Session found for user: ${sessionData.email}`);
 
-      // Special case: if client is sending literal "token" string, provide helpful error
-      if (token === "token") {
-        console.log(
-          "💡 Client is sending literal 'token' string instead of actual JWT"
-        );
-        throw new AppError(
-          401,
-          "Invalid token: client is sending literal 'token' string instead of actual JWT token"
-        );
-      }
-
-      throw new AppError(401, "Invalid token format");
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
-    console.log(`✅ Token verified for user: ${decoded.email || decoded.id}`);
-
-    const user = await User.findById(decoded.id);
+    // Get user from database to ensure they're still active
+    const user = await User.findById(sessionData.userId);
 
     if (!user || user.status !== "active") {
-      console.log(`❌ User not found or inactive: ${decoded.id}`);
+      console.log(`❌ User not found or inactive: ${sessionData.userId}`);
       throw new AppError(401, "User not found or inactive");
     }
 
@@ -355,10 +321,6 @@ router.get("/me", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Get user error:", error);
-    if (error instanceof jwt.JsonWebTokenError) {
-      console.error("JWT Error details:", error.message);
-      throw new AppError(401, "Invalid token");
-    }
     throw new AppError(401, "Not authenticated");
   }
 });
