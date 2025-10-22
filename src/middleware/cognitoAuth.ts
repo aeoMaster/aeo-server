@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from "express";
-import passport from "passport";
 import { AppError } from "./errorHandler";
 import { roleMappingService } from "../services/roleMappingService";
 
@@ -24,7 +23,7 @@ declare global {
  */
 export const requireAuth = (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): void => {
   console.log("=== Cognito Session Authentication Debug ===");
@@ -176,7 +175,7 @@ export const requirePermission = (requiredPermission: string) => {
  */
 export const optionalAuth = (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): void => {
   // Import session service
