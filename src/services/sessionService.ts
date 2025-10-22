@@ -130,7 +130,7 @@ class SessionService {
       cookie: {
         secure: isProduction, // HTTPS in production
         httpOnly: true, // Prevent XSS attacks
-        sameSite: isProduction ? "none" : "lax", // Cross-site in production, lax in dev
+        sameSite: "lax", // Use lax for subdomain authentication
         maxAge: this.sessionTtl * 1000, // Convert to milliseconds
         domain: isProduction ? ".themoda.io" : undefined, // Cross-subdomain in production
         path: "/", // Available on all paths
@@ -251,7 +251,7 @@ class SessionService {
       path: "/",
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
+      sameSite: "lax", // Use lax for subdomain authentication
       maxAge: this.sessionTtl * 1000, // 8 hours
     });
 
@@ -259,23 +259,45 @@ class SessionService {
       domain: isProduction ? ".themoda.io" : "localhost",
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
+      sameSite: "lax",
       path: "/",
       maxAge: `${this.sessionTtl}s`,
     });
 
-    // Clean up any old cookies with incorrect domain (server-api.themoda.io)
+    // Clean up legacy cookies
+    this.cleanupLegacyCookies(res);
+  }
+
+  /**
+   * Clean up legacy cookies (aeo_sessions and server-api.themoda.io scoped cookies)
+   */
+  private cleanupLegacyCookies(res: any): void {
+    const isProduction = process.env.NODE_ENV === "production";
+
     if (isProduction) {
+      // Clean up legacy aeo_sessions cookie
+      res.cookie("aeo_sessions", "", {
+        domain: ".themoda.io",
+        path: "/",
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        maxAge: 0, // Delete the cookie
+      });
+
+      // Clean up old server-api.themoda.io scoped cookies
       res.cookie("aeo_session", "", {
         domain: "server-api.themoda.io",
         path: "/",
         httpOnly: true,
         secure: true,
-        sameSite: "none",
+        sameSite: "lax",
         maxAge: 0, // Delete the cookie
       });
 
-      console.log("🧹 Cleaned up old server-api.themoda.io cookie");
+      console.log(
+        "🧹 Cleaned up legacy cookies (aeo_sessions and server-api.themoda.io)"
+      );
     }
   }
 
@@ -291,21 +313,12 @@ class SessionService {
       path: "/",
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
+      sameSite: "lax",
       maxAge: 0, // Delete the cookie
     });
 
-    // Also clear any old cookies with incorrect domain
-    if (isProduction) {
-      res.cookie("aeo_session", "", {
-        domain: "server-api.themoda.io",
-        path: "/",
-        httpOnly: true,
-        secure: true,
-        sameSite: "none",
-        maxAge: 0,
-      });
-    }
+    // Also clean up legacy cookies
+    this.cleanupLegacyCookies(res);
 
     console.log("🍪 Cleared canonical aeo_session cookie");
   }

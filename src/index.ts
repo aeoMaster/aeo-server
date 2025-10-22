@@ -190,6 +190,25 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser()); // Add cookie parsing for session management
 
+// Cookie debugging middleware (only in development)
+if (process.env.NODE_ENV === "development") {
+  app.use((req, _res, next) => {
+    if (req.path.startsWith("/api/auth/")) {
+      console.log("🍪 Cookie Debug Info:");
+      console.log("  RAW Cookie header:", req.headers.cookie);
+      console.log("  Parsed cookies:", req.cookies);
+      console.log("  aeo_session found:", !!req.cookies?.aeo_session);
+      if (req.cookies?.aeo_session) {
+        console.log(
+          "  aeo_session value:",
+          req.cookies.aeo_session.substring(0, 20) + "..."
+        );
+      }
+    }
+    next();
+  });
+}
+
 // Rate limiting
 app.use("/api/auth", authRateLimit);
 app.use("/api/auth/forgot-password", passwordResetRateLimit);
