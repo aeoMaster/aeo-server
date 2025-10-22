@@ -181,7 +181,7 @@ export const apiRateLimit = rateLimit({
 });
 
 /**
- * CORS configuration
+ * CORS configuration for cross-subdomain authentication
  */
 export const corsOptions = {
   origin: (
@@ -189,10 +189,12 @@ export const corsOptions = {
     callback: (err: Error | null, allow?: boolean) => void
   ) => {
     const allowedOrigins = [
+      "https://themoda.io", // Primary frontend domain
+      "https://www.themoda.io", // www subdomain
       process.env.FRONTEND_ORIGIN,
       process.env.CLIENT_URL,
-      "http://localhost:3000",
-      "http://localhost:3001",
+      "http://localhost:3000", // Development
+      "http://localhost:3001", // Development
     ].filter(Boolean);
 
     // Allow requests with no origin (like mobile apps or curl requests)
@@ -201,10 +203,11 @@ export const corsOptions = {
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.warn(`🚫 CORS blocked origin: ${origin}`);
       callback(new Error("Not allowed by CORS"), false);
     }
   },
-  credentials: true,
+  credentials: true, // Essential for cross-subdomain cookies
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: [
     "Content-Type",

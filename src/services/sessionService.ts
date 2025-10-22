@@ -114,22 +114,26 @@ class SessionService {
 
   /**
    * Get session configuration for Express
+   * Configured for cross-subdomain authentication with canonical aeo_session cookie
    */
   getSessionConfig(): session.SessionOptions {
+    const isProduction = process.env.NODE_ENV === "production";
+
     return {
       store: this.store,
       secret: this.sessionSecret,
-      name: process.env.COOKIE_NAME || "aeo_session",
+      name: "aeo_session", // Canonical cookie name
       resave: false,
       saveUninitialized: true, // Allow saving uninitialized sessions for OAuth state
       rolling: true, // Reset expiration on each request
       proxy: true, // Trust proxy for accurate IP detection
       cookie: {
-        secure: process.env.NODE_ENV === "production", // HTTPS in production
-        httpOnly: true,
-        sameSite: "lax", // Use lax for OAuth redirects
+        secure: isProduction, // HTTPS in production
+        httpOnly: true, // Prevent XSS attacks
+        sameSite: isProduction ? "none" : "lax", // Cross-site in production, lax in dev
         maxAge: this.sessionTtl * 1000, // Convert to milliseconds
-        domain: process.env.COOKIE_DOMAIN || undefined, // Set domain for multi-container consistency
+        domain: isProduction ? ".themoda.io" : undefined, // Cross-subdomain in production
+        path: "/", // Available on all paths
       },
       genid: () => uuidv4(),
     };
@@ -232,6 +236,78 @@ class SessionService {
   hasAnyRole(req: any, requiredRoles: string[]): boolean {
     const userRoles = this.getUserRoles(req);
     return requiredRoles.some((role) => userRoles.includes(role));
+  }
+
+  /**
+   * Set canonical aeo_session cookie for cross-subdomain authentication
+   * This method manually sets the cookie with the correct domain and options
+   */
+  setCanonicalCookie(res: any, sessionId: string): void {
+    const isProduction = process.env.NODE_ENV === "production";
+
+    // Set the canonical cookie with cross-subdomain domain
+    res.cookie("aeo_session", sessionId, {
+      domain: isProduction ? ".themoda.io" : undefined,
+      path: "/",
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: this.sessionTtl * 1000, // 8 hours
+    });
+
+    console.log("🍪 Set canonical aeo_session cookie:", {
+      domain: isProduction ? ".themoda.io" : "localhost",
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      path: "/",
+      maxAge: `${this.sessionTtl}s`,
+    });
+
+    // Clean up any old cookies with incorrect domain (server-api.themoda.io)
+    if (isProduction) {
+      res.cookie("aeo_session", "", {
+        domain: "server-api.themoda.io",
+        path: "/",
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+        maxAge: 0, // Delete the cookie
+      });
+
+      console.log("🧹 Cleaned up old server-api.themoda.io cookie");
+    }
+  }
+
+  /**
+   * Clear canonical aeo_session cookie
+   */
+  clearCanonicalCookie(res: any): void {
+    const isProduction = process.env.NODE_ENV === "production";
+
+    // Clear the canonical cookie
+    res.cookie("aeo_session", "", {
+      domain: isProduction ? ".themoda.io" : undefined,
+      path: "/",
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 0, // Delete the cookie
+    });
+
+    // Also clear any old cookies with incorrect domain
+    if (isProduction) {
+      res.cookie("aeo_session", "", {
+        domain: "server-api.themoda.io",
+        path: "/",
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+        maxAge: 0,
+      });
+    }
+
+    console.log("🍪 Cleared canonical aeo_session cookie");
   }
 
   /**

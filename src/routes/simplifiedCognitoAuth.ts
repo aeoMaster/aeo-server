@@ -6,6 +6,7 @@ import { configService } from "../services/configService";
 import { User } from "../models/User";
 import { SubscriptionService } from "../services/subscriptionService";
 import { oauthStateService } from "../services/oauthStateService";
+import { sessionService } from "../services/sessionService";
 
 const router = Router();
 
@@ -209,6 +210,9 @@ router.get("/callback", async (req: Request, res: Response) => {
 
     console.log(`🔑 Created session: ${sessionId}`);
 
+    // Set canonical aeo_session cookie for cross-subdomain authentication
+    sessionService.setCanonicalCookie(res, sessionId);
+
     // Redirect to frontend with session
     const frontendUrl =
       configService.get("FRONTEND_ORIGIN") || "https://www.themoda.io";
@@ -247,8 +251,10 @@ router.get("/logout", async (_req: Request, res: Response) => {
       ? cognitoDomain
       : `https://${cleanDomain}`;
 
-    // Clear both session cookies (for Cognito) and legacy token cookies
-    res.clearCookie("aeo_session");
+    // Clear canonical aeo_session cookie and any old cookies
+    sessionService.clearCanonicalCookie(res);
+
+    // Also clear legacy token cookies
     res.clearCookie("token");
 
     // Redirect to Cognito logout
@@ -268,8 +274,10 @@ router.get("/logout", async (_req: Request, res: Response) => {
  * Clear session cookies (for API calls)
  */
 router.post("/logout", (_req: Request, res: Response) => {
-  // Clear both session cookies (for Cognito) and legacy token cookies
-  res.clearCookie("aeo_session");
+  // Clear canonical aeo_session cookie and any old cookies
+  sessionService.clearCanonicalCookie(res);
+
+  // Also clear legacy token cookies
   res.clearCookie("token");
 
   res.json({
